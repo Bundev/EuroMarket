@@ -1,3 +1,15 @@
+.compare-description {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.offer-dialog {
+    width: min(28rem, calc(100% - 2rem));
+    max-height: calc(100dvh - 2rem);
+}
+
+.offer-dialog::backdrop { background: rgb(15 23 42 / .55); }
+
 html {
     --site-header-height: 80px;
     scroll-padding-top: calc(var(--site-header-height, 80px) + 12px);
@@ -1436,6 +1448,46 @@ html[data-listing-view="grid"] .search-listing-favorite {
 @media (prefers-reduced-motion: reduce) { .em-toast { transition: none; transform: none; } }
 .account-layout { display: grid; gap: 1.25rem; }
 .account-content { min-width: 0; overflow-wrap: anywhere; }
+
+.seller-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .35rem;
+    margin: .65rem 0 0;
+}
+
+.seller-metric {
+    display: grid;
+    justify-items: center;
+    align-content: start;
+    gap: .15rem;
+    padding: .55rem .2rem;
+    border-radius: .65rem;
+    text-align: center;
+}
+
+.seller-metric-views { color: #174ea6; background: #edf4ff; }
+.seller-metric-favorites { color: #a52047; background: #fff0f4; }
+.seller-metric-contacts { color: #176342; background: #e9f8ef; }
+.seller-metric-label { grid-row: 3; font-size: .6875rem; font-weight: 600; }
+.seller-metric-value { margin: 0; font-size: 1.25rem; font-weight: 700; line-height: 1.1; }
+.seller-metrics-summary { gap: clamp(.4rem, 1.5vw, 1rem); margin-top: 1rem; }
+.seller-metrics-summary .seller-metric { padding: .85rem .25rem; }
+.seller-metrics-summary .seller-metric-value { font-size: clamp(1.5rem, 4vw, 2.5rem); }
+.seller-metrics-summary .seller-metric-label { font-size: .75rem; }
+
+.seller-stats-table { table-layout: fixed; }
+.seller-stats-table th:first-child { width: 40%; }
+.seller-stats-table :is(th, td):not(:first-child) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 575.98px) {
+    .seller-stats-table > :not(caption) > * > * { padding: .45rem .25rem; }
+    .seller-stats-table { font-size: .75rem; }
+    .seller-stats-table thead th { font-size: .6875rem; }
+}
 .account-nav { display: flex; flex-wrap: wrap; gap: .25rem; padding: .5rem; background: white; border: 1px solid #dee2e6; border-radius: .75rem; align-self: start; }
 .account-nav .nav-link { padding: .65rem .75rem; border-radius: .5rem; }
 .account-nav .active { background: #e7f0ff; color: #17449a; font-weight: 600; }

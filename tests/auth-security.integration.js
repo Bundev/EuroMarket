@@ -1,4 +1,4 @@
-require('dotenv').config({ quiet: true });
+const verifyTestEnvironment = require('./test-environment');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -203,4 +203,4 @@ async function run() {
         }
     }
 }
-run().catch(error => { console.error('Auth security checks failed:', error.code || error.name, error.message); process.exitCode = 1; });
+verifyTestEnvironment().then(run).catch(error => { console.error('Auth security checks failed:', error.code || error.name, error.message); process.exitCode = 1; });

@@ -321,16 +321,22 @@
                         <!-- Описание -->
                         <div class="mb-4">
 
-                            <label class="form-label">
-                                Описание
-                            </label>
-
+                            <label class="form-label" for="item-condition">Состояние товара</label>
+                            <input class="form-control mb-3" id="item-condition" name="item_condition" maxlength="80" value="<%= listing.item_condition || '' %>">
+                            <label class="form-label" for="listing-description">Описание и характеристики</label>
                             <textarea
+                                id="listing-description"
                                 name="description"
                                 class="form-control"
                                 rows="7"
                                 required
                             ><%= listing.description %></textarea>
+                            <label for="bargaining-enabled" class="form-label mt-3">Разрешить торг</label>
+                            <select id="bargaining-enabled" name="bargaining_enabled" class="form-select" aria-describedby="bargaining-help">
+                                <option value="0" <%= listing.bargaining_enabled ? '' : 'selected' %>>Нет</option>
+                                <option value="1" <%= listing.bargaining_enabled ? 'selected' : '' %>>Да</option>
+                            </select>
+                            <p id="bargaining-help" class="form-text mb-0">После сохранения покупатели увидят кнопку торга, когда модератор одобрит объявление.</p>
 
                         </div>
 

@@ -1,4 +1,4 @@
-require('dotenv').config({ quiet: true, debug: false });
+const verifyTestEnvironment = require('./test-environment');
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
 const { execFileSync, fork, spawnSync } = require('node:child_process');
@@ -31,12 +31,12 @@ function close(server) {
     return new Promise(resolve => server.close(resolve));
 }
 
-async function launch(overrides = {}) {
+async function launch(cwd, overrides = {}) {
     const reservation = http.createServer();
     const port = await listen(reservation);
     await close(reservation);
     const child = fork(path.join(root, 'index.js'), [], {
-        cwd: root, env: { ...settings, PORT: String(port), ...overrides }, silent: true
+        cwd, env: { ...settings, PORT: String(port), ...overrides }, silent: true
     });
     let stderr = '';
     child.stderr.on('data', chunk => { stderr += chunk; });
@@ -85,16 +85,16 @@ async function run() {
     let fixture, backend, proxy, dev, errors;
     try {
         assert.equal((await db.query('SELECT DATABASE() AS name'))[0][0].name, 'euromarket_test');
+        await fs.mkdir(rootDir, { recursive: true });
+        fixture = await fs.mkdtemp(path.join(rootDir, 'production-test-'));
         for (const [key, value] of Object.entries({
             AUTH_RATE_STORE: 'memory', SESSION_SECRET: 'change-me', TRUSTED_PROXIES: '0.0.0.0/0',
             CSP_MODE: 'off', DB_PASSWORD: '', BIND_HOST: 'bad', DEBUG: '*', PUBLIC_ORIGIN: 'http://market.example.invalid'
         })) {
-            const bad = spawnSync(process.execPath, ['index.js'], { cwd: root, env: { ...settings, [key]: value }, timeout: 5000 });
+            const bad = spawnSync(process.execPath, [path.join(root, 'index.js')], { cwd: fixture, env: { ...settings, [key]: value }, timeout: 5000 });
             assert.equal(bad.status, 1, key);
             assert.doesNotMatch(String(bad.stderr), /node_modules|\bat .*:\d+/);
         }
-        await fs.mkdir(rootDir, { recursive: true });
-        fixture = await fs.mkdtemp(path.join(rootDir, 'production-test-'));
         const openssl = process.env.TEST_OPENSSL || (process.platform === 'win32' ? 'C:/Program Files/Git/usr/bin/openssl.exe' : 'openssl');
         const certPath = path.join(fixture, 'cert.pem'), keyPath = path.join(fixture, 'key.pem');
         execFileSync(openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
@@ -105,7 +105,7 @@ async function run() {
         await fs.mkdir(imageDir);
         await require('sharp')({ create: { width: 10, height: 10, channels: 3, background: 'blue' } })
             .webp().toFile(path.join(imageDir, imageName));
-        backend = await launch({ LISTING_IMAGE_STORAGE_ROOT: fixture });
+        backend = await launch(fixture, { LISTING_IMAGE_STORAGE_ROOT: fixture });
         proxy = https.createServer({ key: await fs.readFile(keyPath), cert }, (req, res) => {
             const upstream = http.request({
                 hostname: host, port: backend.port, path: req.url, method: req.method,
@@ -188,7 +188,7 @@ async function run() {
         assert.deepEqual(JSON.parse(result.body), { error: 'Внутренняя ошибка сервера.' });
         await close(errors); errors = null;
 
-        dev = await launch({ NODE_ENV: 'development', AUTH_RATE_STORE: 'memory', TRUSTED_PROXIES: '', CSP_MODE: 'enforce' });
+        dev = await launch(fixture, { NODE_ENV: 'development', AUTH_RATE_STORE: 'memory', TRUSTED_PROXIES: '', CSP_MODE: 'enforce' });
         const local = await request(dev.port, '/login', { headers: { 'x-forwarded-proto': 'https' } });
         assert.equal(local.status, 200);
         assert.doesNotMatch(local.headers['set-cookie'][0], /; Secure/i);
@@ -207,6 +207,14 @@ async function run() {
         if (dev) dev.child.kill();
         if (backend) backend.child.kill();
         for (const id of sessions) await db.execute('DELETE FROM sessions WHERE session_id=?', [id]);
+        // The HMAC secret is unique to this test. Remove only this run's buckets.
+        const source = '192.0.2.10';
+        const buckets = [['source', source], ['registration-source', source], ['registration-email', uri],
+            ['login-email', uri], ['login-pair', source, uri], ['bcrypt-gate']];
+        for (const parts of buckets) {
+            const key = crypto.createHmac('sha256', settings.SESSION_SECRET).update(JSON.stringify(parts)).digest('hex');
+            await db.execute('DELETE FROM auth_rate_limits WHERE key_hash=?', [key]);
+        }
         await db.execute('DELETE FROM users WHERE email=?', [uri]);
         await db.end();
         if (fixture && path.dirname(path.resolve(fixture)) === rootDir && path.basename(fixture).startsWith('production-test-')) {
@@ -215,4 +223,4 @@ async function run() {
     }
 }
 
-run().catch(error => { console.error(error.code || error.name, error.message); process.exitCode = 1; });
+verifyTestEnvironment().then(run).catch(error => { console.error(error.code || error.name, error.message); process.exitCode = 1; });

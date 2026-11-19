@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Предложения цены' }) %></head>
+<body>
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<div class="container py-4 account-layout">
+    <%- include('../partials/account-nav', { activeAccountPage: '/offers' }) %>
+    <main class="account-content">
+        <h1 class="h3">Предложения цены</h1>
+        <nav class="nav nav-pills gap-2 mb-3" aria-label="Направление предложений">
+            <a class="nav-link <%= received ? '' : 'active' %>" aria-current="<%= received ? 'false' : 'page' %>" href="/offers">Отправленные</a>
+            <a class="nav-link <%= received ? 'active' : '' %>" aria-current="<%= received ? 'page' : 'false' %>" href="/offers?side=received">Полученные</a>
+        </nav>
+        <% if (!offers.length) { %><p>Здесь пока нет предложений.</p><% } %>
+        <% for (const offer of offers) { %>
+            <a class="card card-body text-decoration-none mb-2" href="/offers/<%= offer.id %>">
+                <strong><%= offer.listing_title %></strong>
+                <span><%= offer.amount %> <%= offer.currency %> · <%- include('../partials/offer-status', { status: offer.status }) %></span>
+            </a>
+        <% } %>
+        <% if (nextBefore) { %><a href="/offers?side=<%= received ? 'received' : 'sent' %>&amp;before=<%= nextBefore %>">Следующая страница</a><% } %>
+    </main>
+</div>
+</body>
+</html>

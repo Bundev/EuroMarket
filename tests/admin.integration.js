@@ -1,4 +1,4 @@
-require('dotenv').config({ quiet: true });
+const verifyTestEnvironment = require('./test-environment');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -190,7 +190,7 @@ async function run() {
         if (db) { await db.rollback(); await db.end(); }
     }
 }
-run().catch(error => {
+verifyTestEnvironment().then(run).catch(error => {
     console.error('Admin verification failed:', error.code || error.name, error.message);
     process.exitCode = 1;
 });

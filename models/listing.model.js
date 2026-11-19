@@ -3,6 +3,7 @@ const db = require('../config/db');
 const transaction = require('../config/transaction');
 const { lockEditable, contentChanged } = require('./listingModeration.model');
 const { declinePendingForListing } = require('./deal.model');
+const { listingMetrics } = require('./marketplaceTools.model');
 
 const SEARCH_SORTS = Object.freeze({
     newest: 'l.created_at DESC, l.id DESC',
@@ -21,7 +22,9 @@ async function createListing(data, connection = db) {
         title,
         description,
         price,
-        currency
+        currency,
+        itemCondition = null,
+        bargainingEnabled = false
     } = data;
 
     const [result] = await connection.execute(
@@ -34,8 +37,10 @@ async function createListing(data, connection = db) {
             description,
             price,
             currency,
+            item_condition,
+            bargaining_enabled,
             status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
         [
             userId,
             categoryId,
@@ -44,7 +49,9 @@ async function createListing(data, connection = db) {
             title,
             description,
             price,
-            currency
+            currency,
+            itemCondition,
+            bargainingEnabled
         ]
     );
 
@@ -63,16 +70,8 @@ async function getUserListings(userId, { status, q, sort, requestedPage }) {
     const totalPages = Math.max(1, Math.ceil(Number(count.total) / 20));
     const page = Math.min(requestedPage, totalPages);
     const [rows] = await db.execute(
-        `SELECT
-            l.id,
-            l.title,
-            l.price,
-            l.currency,
-            l.status,
-            l.moderation_locked,
-            l.moderation_reason,
-            l.review_reason,
-            l.created_at,
+        `SELECT l.id,l.title,l.price,l.currency,l.status,l.moderation_locked,l.moderation_reason,
+            l.review_reason,l.created_at,${listingMetrics},
             c.name AS category_name,
             (
                 SELECT li.image_path
@@ -81,10 +80,14 @@ async function getUserListings(userId, { status, q, sort, requestedPage }) {
                 ORDER BY li.sort_order ASC, li.id ASC
                 LIMIT 1
             ) AS main_image
-         FROM listings l
+         FROM (
+             SELECT l.id,l.title,l.price,l.currency,l.status,l.moderation_locked,l.moderation_reason,
+                    l.review_reason,l.created_at,l.category_id,l.views
+             FROM listings l WHERE ${where}
+             ORDER BY ${order} LIMIT ? OFFSET ?
+         ) l
          JOIN categories c ON c.id = l.category_id
-         WHERE ${where}
-         ORDER BY ${order} LIMIT ? OFFSET ?`,
+         ORDER BY ${order}`,
         [...params, 20, (page - 1) * 20]
     );
 
@@ -133,6 +136,8 @@ async function getListingById(id) {
             l.city_id,
             l.title,
             l.description,
+            l.item_condition,
+            l.bargaining_enabled,
             l.price,
             l.currency,
             l.status,
@@ -170,16 +175,19 @@ async function updateListing(listingId, userId, data) {
     return transaction(async connection => {
         const listing = await lockEditable(connection, listingId, userId);
         const { title, description, categoryId, countryId, cityId, price, currency } = data;
+        const itemCondition = data.itemCondition === undefined ? listing.item_condition : data.itemCondition;
+        const bargainingEnabled = data.bargainingEnabled ?? Boolean(listing.bargaining_enabled);
         if (listing.title === title && listing.description === description &&
             Number(listing.category_id) === categoryId && Number(listing.country_id) === countryId &&
             (listing.city_id === null ? null : Number(listing.city_id)) === cityId &&
-            Number(listing.price) === price && listing.currency === currency) {
+            Number(listing.price) === price && listing.currency === currency && listing.item_condition === itemCondition &&
+            Boolean(listing.bargaining_enabled) === bargainingEnabled) {
             return { pending: false };
         }
         const pending = await contentChanged(connection, listing);
         await connection.execute(
-            'UPDATE listings SET title=?, description=?, category_id=?, country_id=?, city_id=?, price=?, currency=? WHERE id=?',
-            [title, description, categoryId, countryId, cityId, price, currency, listingId]
+            'UPDATE listings SET title=?, description=?, category_id=?, country_id=?, city_id=?, price=?, currency=?, item_condition=?, bargaining_enabled=? WHERE id=?',
+            [title, description, categoryId, countryId, cityId, price, currency, itemCondition, bargainingEnabled, listingId]
         );
         return { pending };
     });

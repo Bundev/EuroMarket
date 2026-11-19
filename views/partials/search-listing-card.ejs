@@ -78,6 +78,7 @@
 
         </div>
 
+        <div class="mt-2"><%- include('./compare-button', { listing }) %></div>
         <% if (typeof historyPage === 'number') { %>
             <form action="/recently-viewed/<%= listing.id %>/remove" method="post" class="mt-2">
                 <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">

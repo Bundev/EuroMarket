@@ -515,3 +515,91 @@ CREATE TABLE IF NOT EXISTS recently_viewed (
     CONSTRAINT fk_recently_viewed_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_recently_viewed_listing FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS item_condition VARCHAR(80) NULL;
+ALTER TABLE favorites ADD COLUMN IF NOT EXISTS notify_price_drop BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS listing_price_history (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    listing_id INT UNSIGNED NOT NULL,
+    price DECIMAL(12,2) NOT NULL,
+    currency CHAR(3) NOT NULL,
+    is_drop BOOLEAN NOT NULL DEFAULT FALSE,
+    published_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    INDEX idx_listing_price_history (listing_id,id),
+    FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER $$
+CREATE OR REPLACE TRIGGER trg_listing_price_history AFTER UPDATE ON listings FOR EACH ROW
+BEGIN
+    DECLARE last_price DECIMAL(12,2) DEFAULT NULL;
+    DECLARE last_currency CHAR(3) DEFAULT NULL;
+    IF (OLD.status='active' AND NEW.status<>'active')
+       OR (NEW.status='active' AND (OLD.status<>'active' OR OLD.price<>NEW.price OR OLD.currency<>NEW.currency)) THEN
+        SET last_price = (SELECT h.price FROM listing_price_history h WHERE h.listing_id=NEW.id ORDER BY h.id DESC LIMIT 1);
+        SET last_currency = (SELECT h.currency FROM listing_price_history h WHERE h.listing_id=NEW.id ORDER BY h.id DESC LIMIT 1);
+        IF last_price IS NULL AND OLD.status='active' AND OLD.moderation_locked=0 THEN
+            INSERT INTO listing_price_history (listing_id,price,currency) VALUES (OLD.id,OLD.price,OLD.currency);
+            SET last_price = OLD.price;
+            SET last_currency = OLD.currency;
+        END IF;
+        IF NEW.status='active' AND NEW.moderation_locked=0
+           AND (last_price IS NULL OR last_price<>NEW.price OR last_currency<>NEW.currency) THEN
+            INSERT INTO listing_price_history (listing_id,price,currency,is_drop)
+            VALUES (NEW.id,NEW.price,NEW.currency,COALESCE(last_currency=NEW.currency AND NEW.price<last_price,FALSE));
+            IF last_currency=NEW.currency AND NEW.price<last_price THEN
+                INSERT INTO notifications (user_id,event_key,type,text,link)
+                SELECT f.user_id,CONCAT('price-drop:',NEW.id,':',NEW.review_version),'listing_status',
+                       CONCAT('Цена снижена: «',NEW.title,'» · ',NEW.price,' ',NEW.currency),
+                       CONCAT('/listings/',NEW.id)
+                FROM favorites f JOIN users u ON u.id=f.user_id AND u.status='active'
+                WHERE f.listing_id=NEW.id AND f.notify_price_drop=1 AND f.user_id<>NEW.user_id
+                ON DUPLICATE KEY UPDATE notifications.id=notifications.id;
+            END IF;
+        END IF;
+    END IF;
+END$$
+DELIMITER ;
+
+
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS bargaining_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS price_negotiations (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    listing_id INT UNSIGNED NOT NULL,
+    buyer_id INT UNSIGNED NOT NULL,
+    seller_id INT UNSIGNED NOT NULL,
+    listing_title VARCHAR(200) NOT NULL,
+    listed_price DECIMAL(12,2) NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    currency CHAR(3) NOT NULL,
+    listing_version INT UNSIGNED NOT NULL,
+    version INT UNSIGNED NOT NULL DEFAULT 1,
+    last_actor_id INT UNSIGNED NOT NULL,
+    status ENUM('open','accepted','declined','expired','converted') NOT NULL DEFAULT 'open',
+    request_key CHAR(36) NOT NULL,
+    deal_id INT UNSIGNED NULL,
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    active_buyer_id INT UNSIGNED AS (CASE WHEN status IN ('open','accepted') THEN buyer_id END) PERSISTENT,
+    UNIQUE KEY uq_negotiation_active (listing_id,active_buyer_id),
+    UNIQUE KEY uq_negotiation_request (listing_id,buyer_id,request_key),
+    KEY idx_negotiation_buyer (buyer_id,id),
+    KEY idx_negotiation_seller (seller_id,id),
+    FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE,
+    FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (seller_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS price_negotiation_events (
+    negotiation_id INT UNSIGNED NOT NULL,
+    version INT UNSIGNED NOT NULL,
+    actor_id INT UNSIGNED NOT NULL,
+    action ENUM('offered','countered','accepted','declined','converted') NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (negotiation_id,version),
+    FOREIGN KEY (negotiation_id) REFERENCES price_negotiations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

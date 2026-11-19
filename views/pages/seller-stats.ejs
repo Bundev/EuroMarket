@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Статистика продавца' }) %></head>
+<body>
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<div class="container py-4 account-layout">
+    <%- include('../partials/account-nav', { activeAccountPage: '/seller-stats' }) %>
+    <main class="account-content">
+        <h1 class="h3">Статистика продавца</h1>
+        <%- include('../partials/seller-metrics', { metrics: totals, summary: true }) %>
+        <p class="small text-muted mt-3">В избранном учитываются текущие добавления. Просмотры и диалоги показаны за всё время.</p>
+        <h2 class="h5 mt-4">По объявлениям</h2>
+        <% if (!listings.length) { %><p>У вас пока нет объявлений.</p><% } else { %>
+            <div class="card overflow-hidden">
+                <table class="table table-hover align-middle mb-0 seller-stats-table">
+                    <caption class="visually-hidden">Статистика по объявлениям</caption>
+                    <thead class="table-light">
+                        <tr><th scope="col">Объявление</th><th scope="col">Просмотры</th><th scope="col">Избранное</th><th scope="col">Диалоги</th></tr>
+                    </thead>
+                    <tbody>
+                        <% for (const item of listings) { %>
+                            <tr>
+                                <th scope="row"><a href="/listings/<%= item.id %>"><%= item.title %></a></th>
+                                <td><%= item.views %></td><td><%= item.favorites %></td><td><%= item.contacts %></td>
+                            </tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        <% } %>
+        <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => '/seller-stats?page=' + value }) %>
+    </main>
+</div>
+</body>
+</html>

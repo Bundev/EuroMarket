@@ -11,6 +11,16 @@ const { hasCompletedPurchase } = require('../models/deal.model');
 const { ratingFor } = require('../models/review.model');
 const { isFollowing } = require('../models/follow.model');
 const recentlyViewed = require('../models/recentlyViewed.model');
+const recommendations = require('../models/recommendation.model');
+const marketplaceTools = require('../models/marketplaceTools.model');
+
+function itemCondition(value) {
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string' || value.trim().length > 80) {
+        throw Object.assign(new Error('Укажите состояние товара длиной до 80 символов.'), { status: 400 });
+    }
+    return value.trim() || null;
+}
 const seo = require('../services/seo');
 const { getAllCategories, getCategoryNavigation } = require('../models/category.model');
 
@@ -126,6 +136,8 @@ async function store(req, res) {
             const id = await listingModel.createListing({
                 userId: req.session.user.id, categoryId, countryId, cityId,
                 title: title.trim(), description: description.trim(), price: priceNumber,
+                itemCondition: itemCondition(req.body.item_condition),
+                bargainingEnabled: req.body.bargaining_enabled === '1',
                 currency: rows[0].currency
             }, connection);
             await listingImageModel.addImages(id, imagePaths, 0, connection);
@@ -220,12 +232,15 @@ async function show(req, res) {
         }
 
         const canFollowSeller = isPublic && Number(currentUserId) !== Number(listing.user_id);
+        const canOfferPrice = Boolean(currentUserId && isPublic &&
+            Number(currentUserId) !== Number(listing.user_id) && listing.bargaining_enabled && !listing.reserved);
         const sellerFollow = canFollowSeller ? {
             following: currentUserId ? await isFollowing(listing.user_id, currentUserId) : false
         } : null;
-        if (sellerFollow && currentUserId) res.set('Cache-Control', 'private, no-store');
         const recentListings = res.locals.viewingHistoryEnabled ? await recentlyViewed.preview(currentUserId, listing.id) : [];
-        if (recentListings.length) res.set('Cache-Control', 'private, no-store');
+        const related = isPublic ? await recommendations({ userId: currentUserId,
+            countryId: res.locals.selectedCountryInfo?.id, similar: listing, previewSize: 4 }) : null;
+        res.set('Cache-Control', 'private, no-store');
 
         res.render('pages/listing-show', {
             listing,
@@ -238,6 +253,13 @@ async function show(req, res) {
             sellerRating: await ratingFor(listing.user_id),
             sellerFollow,
             recentListings,
+            isPublic,
+            offerRequestKey: canOfferPrice ? require('node:crypto').randomUUID() : null,
+            priceAlert: isPublic && res.locals.favoriteIds?.has(Number(listing.id))
+                ? await marketplaceTools.priceAlert(listing.id, currentUserId) : null,
+            priceHistory: isPublic || Number(currentUserId) === Number(listing.user_id)
+                ? await marketplaceTools.prices(listing.id, currentUserId) : [],
+            related: related?.listings,
             listingPath: seo.listingPath,
             recordView: Boolean(canFollowSeller && currentUserId && res.locals.viewingHistoryEnabled),
             reportReasons: require('../config/reportReasons'),
@@ -397,6 +419,8 @@ async function update(req, res) {
             {
                 title: title.trim(),
                 description: description.trim(),
+                itemCondition: itemCondition(req.body.item_condition),
+                bargainingEnabled: req.body.bargaining_enabled === undefined ? undefined : req.body.bargaining_enabled === '1',
                 categoryId,
                 countryId,
                 cityId,
@@ -410,7 +434,7 @@ async function update(req, res) {
         res.redirect(`/listings/${listingId}`);
 
     } catch (error) {
-        if ([403, 404, 409].includes(error.status)) return res.status(error.status).send(error.message);
+        if ([400, 403, 404, 409].includes(error.status)) return res.status(error.status).send(error.message);
         logError('Ошибка обновления объявления:', error);
         res.status(500).send('Ошибка сервера');
     }

@@ -1,4 +1,4 @@
-require('dotenv').config({ quiet: true });
+const verifyTestEnvironment = require('./test-environment');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -117,8 +117,14 @@ async function run() {
             checks.push(label);
         }
         for (const [format, buffer] of Object.entries(generated)) {
-            const response = await send('/listings', [photo(buffer, 'client.' + (format === 'jpeg' ? 'jpg' : format), 'image/' + format)]);
+            const bargainingEnabled = format === 'jpeg' ? 1 : 0;
+            const fields = { item_condition: 'Like new', ...(bargainingEnabled ? { bargaining_enabled: '1' } : {}) };
+            const response = await send('/listings', [photo(buffer, 'client.' + (format === 'jpeg' ? 'jpg' : format), 'image/' + format)], { fields });
             const id = Number(response.headers.get('location').split('=')[1]);
+            const [[created]] = await pool.execute(
+                'SELECT title,description,price,currency,category_id,country_id,item_condition,bargaining_enabled FROM listings WHERE id=?', [id]);
+            assert.deepEqual(created, { title: 'Image security ' + stamp, description: 'Fixture', price: '12.00',
+                currency: 'EUR', category_id: category, country_id: country, item_condition: 'Like new', bargaining_enabled: bargainingEnabled });
             const [rows] = await pool.execute('SELECT image_path FROM listing_images WHERE listing_id=?', [id]);
             assert.match(rows[0].image_path, /^\/uploads\/listings\/[a-f0-9-]{36}\.webp$/);
             assert.equal((await fetch(base + rows[0].image_path)).status, 404);
@@ -127,6 +133,19 @@ async function run() {
             assert.equal(served.headers.get('x-content-type-options'), 'nosniff');
             const metadata = await sharp(Buffer.from(await served.arrayBuffer())).metadata();
             assert.equal(metadata.format, 'webp'); assert.equal(metadata.width, 80); assert.equal(metadata.exif, undefined);
+            if (bargainingEnabled) {
+                const edit = await fetch(base + '/listings/' + id + '/edit', {
+                    method: 'POST', headers: { cookie },
+                    body: new URLSearchParams({ _csrf: token, title: created.title, description: 'Edited fixture',
+                        price: '13.45', country_id: country, category_id: category, item_condition: 'Used', bargaining_enabled: '0' }),
+                    redirect: 'manual'
+                });
+                assert.equal(edit.status, 302);
+                const [[edited]] = await pool.execute(
+                    'SELECT title,description,price,currency,category_id,country_id,item_condition,bargaining_enabled FROM listings WHERE id=?', [id]);
+                assert.deepEqual(edited, { ...created, description: 'Edited fixture', price: '13.45', item_condition: 'Used', bargaining_enabled: 0 });
+                assert.deepEqual((await pool.execute('SELECT image_path FROM listing_images WHERE listing_id=?', [id]))[0], rows);
+            }
             checks.push('valid ' + format);
         }
         const fake = Buffer.concat([Buffer.from([255, 216, 255, 224]), Buffer.from('<html><script>alert(1)</script></html>')]);
@@ -303,4 +322,4 @@ async function run() {
         await pool.end();
     }
 }
-run().catch(error => { console.error('Image checks failed:', error.code || error.name, error.message); process.exitCode = 1; });
+verifyTestEnvironment().then(run).catch(error => { console.error('Image checks failed:', error.code || error.name, error.message); process.exitCode = 1; });

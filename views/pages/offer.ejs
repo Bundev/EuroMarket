@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Переговоры о цене' }) %></head>
+<body>
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<div class="container py-4 account-layout">
+    <%- include('../partials/account-nav', { activeAccountPage: '/offers' }) %>
+    <main class="account-content">
+        <a href="/offers<%= user.id === offer.seller_id ? '?side=received' : '' %>">К предложениям</a>
+        <h1 class="h3 mt-2"><%= offer.listing_title %></h1>
+        <p><%- include('../partials/offer-status', { status: offer.status }) %></p>
+        <div class="card card-body mb-4">
+            <p class="mb-1"><%= offer.available ? 'Цена объявления' : 'Цена на момент предложения' %> · <%= offer.current_price %> <%= offer.currency %></p>
+            <p class="fw-semibold mb-1"><%= ['accepted', 'converted'].includes(offer.status) ? 'Согласованная цена' : 'Последнее предложение' %>
+                · <%= offer.amount %> <%= offer.currency %></p>
+            <% if (!offer.available && ['open','accepted'].includes(offer.status)) { %>
+                <p class="mb-0 text-muted">Срок предложения истёк, объявление изменилось или стало недоступно для торга.</p>
+            <% } %>
+            <% if (offer.available && offer.status === 'open' && offer.last_actor_id !== user.id) { %>
+                <form method="post" action="/offers/<%= offer.id %>/reply" class="d-flex flex-wrap gap-2 mt-3">
+                    <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                    <input type="hidden" name="version" value="<%= offer.version %>">
+                    <button class="btn btn-success" name="action" value="accepted">Принять</button>
+                    <button class="btn btn-outline-danger" name="action" value="declined">Отклонить</button>
+                </form>
+                <% if (offer.version < 98) { %>
+                    <form method="post" action="/offers/<%= offer.id %>/reply" class="mt-3">
+                        <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                        <input type="hidden" name="version" value="<%= offer.version %>">
+                        <label for="counter-amount" class="form-label">Встречная цена, <%= offer.currency %></label>
+                        <input id="counter-amount" name="amount" class="form-control mb-2" inputmode="decimal" maxlength="13" required>
+                        <button class="btn btn-outline-primary" name="action" value="countered">Отправить встречную цену</button>
+                    </form>
+                <% } %>
+            <% } %>
+            <% if (offer.available && offer.status === 'accepted' && user.id === offer.buyer_id) { %>
+                <form method="post" action="/offers/<%= offer.id %>/checkout" class="mt-3">
+                    <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                    <button class="btn btn-primary">Запросить покупку по согласованной цене</button>
+                </form>
+            <% } %>
+            <% if (offer.deal_id) { %><a class="mt-2" href="/deals/<%= offer.deal_id %>">Открыть сделку</a><% } %>
+        </div>
+        <h2 class="h5">История переговоров</h2>
+        <ol class="list-group">
+            <% const actions = { offered: 'Предложение', countered: 'Встречная цена', accepted: 'Принято', declined: 'Отклонено', converted: 'Запрошена покупка' }; %>
+            <% for (const item of history) { %>
+                <li class="list-group-item d-flex flex-wrap justify-content-between gap-2">
+                    <span><%= item.actor_id === offer.buyer_id ? 'Покупатель' : 'Продавец' %> · <%= actions[item.action] %> · <%= item.amount %> <%= offer.currency %></span>
+                    <time datetime="<%= new Date(item.created_at).toISOString() %>"><%= new Date(item.created_at).toLocaleString('ru-RU') %></time>
+                </li>
+            <% } %>
+        </ol>
+        <p class="small text-muted mt-3">Переговоры и согласованная цена действуют 7 дней с последнего ответа. После отказа новое предложение доступно через 24 часа.</p>
+    </main>
+</div>
+</body>
+</html>

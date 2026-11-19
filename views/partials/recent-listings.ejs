@@ -1,15 +1,3 @@
 <% if (listings.length) { %>
-    <section class="container my-5" aria-labelledby="recent-listings-title">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-            <h2 class="h4 mb-0" id="recent-listings-title">Недавно просмотренные</h2>
-            <a href="/recently-viewed">Смотреть все</a>
-        </div>
-        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-3 recent-listings-grid">
-            <% for (const listing of listings) { %>
-                <div class="col position-relative">
-                    <%- include('./marketplace-card', { listing }) %>
-                </div>
-            <% } %>
-        </div>
-    </section>
+    <%- include('./listing-strip', { listings, heading: 'Недавно просмотренные', headingId: 'recent-listings-title', more: '/recently-viewed' }) %>
 <% } %>

@@ -1,0 +1,13 @@
+<section class="container my-5" aria-labelledby="<%= headingId %>">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h2 class="h4 mb-0" id="<%= headingId %>"><%= heading %></h2>
+        <% if (more) { %><a href="<%= more %>">Смотреть все</a><% } %>
+    </div>
+    <% if (listings.length) { %>
+        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-3 recent-listings-grid">
+            <% for (const listing of listings) { %>
+                <div class="col position-relative"><%- include('./marketplace-card', { listing }) %></div>
+            <% } %>
+        </div>
+    <% } else { %><p class="text-muted">Пока нет подходящих объявлений.</p><% } %>
+</section>

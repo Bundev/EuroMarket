@@ -1,4 +1,4 @@
-require('dotenv').config({ quiet: true });
+const verifyTestEnvironment = require('./test-environment');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const path = require('node:path');
@@ -14,7 +14,7 @@ async function run() {
     try {
         assert.equal((await db.query('SELECT DATABASE() AS name'))[0][0].name, 'euromarket_test');
         const applyMigrations = require('./apply-migrations');
-        const migrations = ['011_deal_notifications.sql', '012_deal_events.sql', '013_deal_disputes.sql', '014_seller_follows.sql', '015_saved_searches.sql', '016_recently_viewed.sql'];
+        const migrations = ['011_deal_notifications.sql', '012_deal_events.sql', '013_deal_disputes.sql', '014_seller_follows.sql', '015_saved_searches.sql', '016_recently_viewed.sql', '017_listing_price_history.sql', '018_price_negotiations.sql'];
         await applyMigrations(db, migrations);
         await applyMigrations(db, migrations);
         let rejectedEvent;
@@ -84,7 +84,7 @@ async function run() {
             res.sendStatus(204);
         });
         app.use(require('../middleware/pageContext'));
-        for (const route of ['home','search','savedSearch','auth','profile','follow','listing','recentlyViewed','deal','dispute','review','message','favorite','notification','admin']) {
+        for (const route of ['home','search','savedSearch','auth','profile','follow','listing','recentlyViewed','marketplaceTools','negotiation','deal','dispute','review','message','favorite','notification','admin']) {
             app.use(require('../routes/' + route + '.routes'));
         }
         server = await new Promise(resolve => { const local = app.listen(0,'127.0.0.1',() => resolve(local)); });
@@ -124,6 +124,9 @@ async function run() {
         assert.match(second,/Page sample 20/);
         assert.doesNotMatch(second,/Page sample 19/);
         assert.match((await request(seller,'/my-listings?status=archived',200)).html,/Archived test/);
+        const cardMetrics = html => Array.from(html.matchAll(/<dd class="seller-metric-value">(\d+)<\/dd>/g),
+            match => Number(match[1]));
+        assert.deepEqual(cardMetrics((await request(seller, '/my-listings?status=archived&q=Archived+test', 200)).html), [0, 0, 0]);
         assert.doesNotMatch((await request(buyer,'/my-listings',200)).html,/Unique account purchase/);
         assert.doesNotMatch((await request(seller,'/my-purchases',200)).html,/Historical sold/);
 
@@ -771,11 +774,37 @@ async function run() {
             method:'PUT', headers:{ cookie:buyer.cookie, 'X-CSRF-Token':buyer.token }
         });
         assert.equal(favorite.status,200);
+        const alertPath = candidatePath + '/price-alert';
+        await request(buyer, alertPath, 403, { enabled: 'yes' }, '');
+        await request(other, alertPath, 404, { enabled: 'yes' });
+        await request(buyer, alertPath, 303, { enabled: 'yes' });
+        const countViewPath = '/api/listing-views/' + candidate;
+        await request(buyer, countViewPath, 403, {}, '');
+        await request(seller, countViewPath, 204, {});
+        await request(buyer, countViewPath, 204, {});
+        await request(buyer, countViewPath, 204, {});
+        const [[counted]] = await db.execute('SELECT views FROM listings WHERE id=?', [candidate]);
+        assert.equal(counted.views, 1);
+        await request({}, '/seller-stats', 302);
+        assert.match((await request(seller, '/seller-stats', 200)).html, /Current version/);
+        assert.doesNotMatch((await request(buyer, '/seller-stats?user_id=' + seller.id, 200)).html, /Current version/);
+        const comparePath = '/compare?ids=' + [candidate, privateId, blockedId, candidate].join(',');
+        const compare = await request({}, comparePath, 200);
+        assert.match(compare.html, /Current version/);
+        assert.equal((compare.html.match(/data-remove-comparison=/g) || []).length, 1);
         await start(buyer,candidate,303);
+        await request(buyer, '/messages/start', 303, { listing_id: candidate });
+        const ownerCardPath = '/my-listings?q=' + encodeURIComponent('Current version');
+        assert.deepEqual(cardMetrics((await request(seller, ownerCardPath + '&status=active', 200)).html), [1, 1, 1]);
+        assert.deepEqual(cardMetrics((await request(buyer, ownerCardPath + '&user_id=' + seller.id, 200)).html), []);
         await recordView(buyer, candidate);
         assert.ok((await historyIds(buyer)).includes(candidate));
-        await request(seller,candidatePath + '/edit',302,edit('Private pending edit'));
+        await request(seller,candidatePath + '/edit',302,{ ...edit('Private pending edit'), price: '30', item_condition: 'Like new' });
         assert.equal((await currentReview()).status,'pending_review');
+        assert.deepEqual(cardMetrics((await request(seller, '/my-listings?status=pending_review&q=Private+pending+edit', 200)).html), [1, 1, 1]);
+        assert.doesNotMatch((await request({}, comparePath, 200)).html, /Private pending edit|Current version/);
+        const priceHistory = async () => (await db.execute('SELECT price,is_drop FROM listing_price_history WHERE listing_id=? ORDER BY id', [candidate]))[0];
+        assert.deepEqual(await priceHistory(), [{ price: '35.00', is_drop: 0 }]);
         await request(buyer, '/notifications/' + sellerPublication[0].id + '/open', 404);
         await request({},candidatePath,404);
         await start(buyer,candidate,404);
@@ -809,6 +838,11 @@ async function run() {
         }
         assert.equal(await jobs.processBatch(), false);
         assert.deepEqual(await publicationNotices(candidate), sellerPublication);
+        assert.deepEqual(await priceHistory(), [{ price: '35.00', is_drop: 0 }, { price: '30.00', is_drop: 1 }]);
+        const finalComparison = await request({}, comparePath, 200);
+        assert.match(finalComparison.html, /Like new/);
+        const priceNotices = (await db.execute("SELECT user_id FROM notifications WHERE event_key LIKE ?", ['price-drop:' + candidate + ':%']))[0];
+        assert.deepEqual(priceNotices, [{ user_id: buyer.id }]);
         await move(seller,(await rows(candidate))[0].id,'accept',303);
         await request(seller,candidatePath + '/edit',409,edit('Edit during deal'));
         await request(seller,candidatePath + '/images/1/delete',409,{});
@@ -896,6 +930,30 @@ async function run() {
         assert.deepEqual(deliveredSaved.map(item => item.user_id).sort(), [seller.id, buyer.id].sort());
         assert.equal(deliveredSaved[0].link, '/listings/' + savedListing);
         assert.match(deliveredSaved[0].text, /Saved match in a child category.*25\.00 EUR/);
+        const recPath = '/recommendations';
+        const recPage = await request(buyer, recPath + '?country=DE', 200);
+        assert.match(recPage.headers.get('cache-control'), /no-store/);
+        assert.match(recPage.headers.get('x-robots-tag'), /noindex/);
+        assert.equal(cardIds(recPage.html)[0], savedListing);
+        assert.match(recPage.html, /data-listing-view-button="list"/);
+        const recPageTwo = cardIds((await request(buyer, recPath + '?page=2', 200)).html);
+        assert.equal(cardIds(recPage.html).length, 20);
+        assert.ok(recPageTwo.length > 0 && recPageTwo.every(id => !cardIds(recPage.html).includes(id)));
+        const recHome = (await request(buyer, '/', 200)).html.match(/aria-labelledby="recommendations-title"[\s\S]*?<\/section>/)[0];
+        assert.deepEqual(cardIds(recHome), cardIds(recPage.html).slice(0, 8));
+        assert.match(recHome, /href="\/recommendations"/);
+        const latest = cardIds((await request(buyer, recPath + '?sort=newest', 200)).html);
+        const [expectedLatest] = await db.execute(`SELECT l.id FROM listings l JOIN users u ON u.id=l.user_id
+            WHERE l.status='active' AND l.moderation_locked=0 AND u.status='active' AND l.country_id=? AND l.user_id<>?
+            ORDER BY l.created_at DESC,l.id DESC LIMIT 20`, [country, buyer.id]);
+        assert.deepEqual(latest, expectedLatest.map(row => row.id));
+        const similarCards = cardIds((await request(buyer, canonicalPath, 200)).html.match(/aria-labelledby="similar-title"[\s\S]*?<\/section>/)[0]);
+        assert.equal(similarCards.length, 4);
+        assert.ok(!similarCards.includes(seoId));
+        const foreignRecs = cardIds((await request(buyer, recPath + '?country=' + feedCountry.code, 200)).html);
+        assert.ok(foreignRecs.includes(abroad) && !foreignRecs.includes(savedListing));
+        assert.ok(!cardIds((await request(seller, recPath + '?country=all', 200)).html).includes(savedListing));
+        await request(buyer, recPath + '?country=all', 200);
         assert.ok((await publicationNotices(savedListing)).some(notice => notice.user_id === buyer.id));
         assert.ok((await request(buyer, opened.pathname + opened.search, 200)).html.includes('Saved match in a child category'));
         await request(seller, '/listings/' + savedListing + '/unpublish', 302, {});
@@ -988,18 +1046,113 @@ async function run() {
         const moved = await historyIds(buyer);
         assert.equal(moved.length, 100);
         assert.equal(moved[0], capped.at(-1));
+        const recentSection = html => html.match(/<section\b[^>]*aria-labelledby="recent-listings-title"[^>]*>[\s\S]*?<\/section>/)?.[0] ?? '';
+        const homePreview = recentSection((await request(buyer, '/', 200)).html);
+        assert.deepEqual(cardIds(homePreview), moved.slice(0, 4));
+        assert.match(homePreview, /href="\/recently-viewed">Смотреть все/);
+        await recordView(buyer, seoId);
+        assert.deepEqual(cardIds(recentSection((await request(buyer, canonicalPath, 200)).html)), moved.slice(0, 4));
+        assert.equal(recentSection((await request({}, canonicalPath, 200)).html), '');
+        assert.equal(recentSection((await request(other, canonicalPath, 200)).html), '');
+        await request(buyer, '/profile/viewing-history', 303, { save_listing_history: 'off' });
+        assert.equal(recentSection((await request(buyer, canonicalPath, 200)).html), '');
+        await request(buyer, '/profile/viewing-history', 303, { save_listing_history: 'on' });
         const paginatedHistory = [];
         for (let page = 1; page <= 5; page++) {
             const cards = cardIds((await request(buyer, historyPath + '?page=' + page, 200)).html);
             assert.equal(cards.length, 20);
             paginatedHistory.push(...cards);
         }
-        assert.deepEqual(paginatedHistory, moved);
+        assert.deepEqual(paginatedHistory, [seoId, ...moved.slice(0, 99)]);
+        await db.execute("UPDATE listings SET status='draft', moderation_locked=1 WHERE id=?", [moved[0]]);
+        assert.deepEqual(cardIds(recentSection((await request(buyer, canonicalPath, 200)).html)), moved.slice(1, 5));
         await recordView(other, cheap);
         await request(buyer, historyPath + '/clear', 303, { user_id: other.id });
         assert.deepEqual(await historyIds(buyer), []);
         assert.deepEqual(await historyIds(other), [cheap]);
         assert.match((await request(buyer, historyPath, 200)).html, /История просмотров пока пуста/);
+
+        // Two equally recent items in the same category: only the price signal distinguishes them.
+        const near = await listing('Recommendation near', 'active');
+        const far = await listing('Recommendation far', 'active');
+        await db.execute("UPDATE listings SET category_id=?,created_at='2020-01-01',price=IF(id=?,25,500) WHERE id IN (?,?)",
+            [savedChild, near, near, far]);
+        const recommendationModel = require('../models/recommendation.model');
+        async function orderedPair(historyEnabled) {
+            const options = { userId: other.id, countryId: country, historyEnabled };
+            const first = await recommendationModel(options);
+            const ids = first.listings.map(row => row.id);
+            for (let p = 2; p <= first.totalPages; p++) {
+                const next = await recommendationModel({ ...options, requestedPage: p });
+                ids.push(...next.listings.map(row => row.id));
+            }
+            assert.ok(![privateId, blockedId, item, abroad].some(id => ids.includes(id)));
+            return ids.filter(id => id === near || id === far);
+        }
+        await recordView(other, savedListing);
+        assert.deepEqual(await orderedPair(true), [near, far]);
+        assert.deepEqual(await orderedPair(false), [far, near]);
+        await db.execute('INSERT INTO favorites(user_id,listing_id) VALUES (?,?)', [other.id, savedListing]);
+        assert.deepEqual(await orderedPair(false), [near, far]);
+
+        const negotiable = await listing('Negotiation fixture', 'active');
+        const offerData = { listing_id: negotiable, listing_version: '0', currency: 'EUR', amount: '10.25', request_key: crypto.randomUUID() };
+        await request({}, '/offers', 302);
+        await request(buyer, '/offers', 404, offerData);
+        const negotiableEdit = { title: 'Negotiation fixture', description: 'Test', price: '25',
+            country_id: country, category_id: category };
+        await request(seller, '/listings/' + negotiable + '/edit', 302, { ...negotiableEdit, bargaining_enabled: '1' });
+        const [[editedOfferListing]] = await db.execute('SELECT bargaining_enabled,status,review_version FROM listings WHERE id=?', [negotiable]);
+        assert.equal(editedOfferListing.bargaining_enabled, 1);
+        assert.equal(editedOfferListing.status, 'pending_review');
+        await request(buyer, '/listings/' + negotiable, 404);
+        await request(admin, '/admin/moderation/' + negotiable, 303, form(editedOfferListing.review_version,'approve'));
+        offerData.listing_version = String(editedOfferListing.review_version);
+        const negotiablePath = (await request(buyer, '/listings/' + negotiable, 301)).headers.get('location');
+        assert.match((await request(buyer, negotiablePath, 200)).html, /Запросить покупку<\/button>\s*<\/form>\s*<button[^>]*data-open-price-offer>Предложить свою цену/);
+        assert.doesNotMatch((await request(seller, negotiablePath, 200)).html, /data-open-price-offer/);
+        await request(seller, '/offers', 404, offerData);
+        await request(buyer, '/offers', 403, offerData, '');
+        await request(buyer, '/offers', 400, { ...offerData, amount: '10.251' });
+        await request(buyer, '/offers', 409, { ...offerData, currency: 'UAH' });
+        const openedOffer = (await request(buyer, '/offers', 303, offerData)).headers.get('location');
+        assert.equal((await request(buyer, '/offers', 303, offerData)).headers.get('location'), openedOffer);
+        await request(buyer, '/offers', 409, { ...offerData, request_key: crypto.randomUUID() });
+        await request(other, openedOffer, 404);
+        assert.match((await request(seller, '/offers?side=received', 200)).html, /Negotiation fixture/);
+        const offerPage = await request(buyer, openedOffer, 200);
+        assert.match(offerPage.html, /10\.25 EUR/);
+        assert.match(offerPage.headers.get('x-robots-tag'), /noindex/);
+        await request(buyer, openedOffer + '/reply', 409, { version: '1', action: 'accepted' });
+        await request(seller, openedOffer + '/reply', 303, { version: '1', action: 'countered', amount: '12,50' });
+        const racing = await Promise.all([
+            request(buyer, openedOffer + '/reply', undefined, { version: '2', action: 'accepted' }),
+            request(buyer, openedOffer + '/reply', undefined, { version: '2', action: 'accepted' })
+        ]);
+        assert.deepEqual(racing.map(result => result.status).sort(), [303,409]);
+        await request(seller, openedOffer + '/checkout', 404, {});
+        const checkout = await request(buyer, openedOffer + '/checkout', 303, {});
+        assert.equal((await request(buyer, openedOffer + '/checkout', 303, {})).headers.get('location'), checkout.headers.get('location'));
+        const [agreedDeal] = await rows(negotiable);
+        assert.equal((await rows(negotiable)).length, 1);
+        assert.equal(agreedDeal.price, '12.50');
+        assert.equal(agreedDeal.currency, 'EUR');
+        assert.equal(agreedDeal.status, 'requested');
+        assert.equal((await db.execute('SELECT price FROM listings WHERE id=?', [negotiable]))[0][0].price, '25.00');
+        assert.match((await request(buyer, checkout.headers.get('location'), 200)).html, /12[,.]5/);
+        const declinedOffer = (await request(other, '/offers', 303, offerData)).headers.get('location');
+        await request(seller, declinedOffer + '/reply', 303, { version: '1', action: 'declined' });
+        await request(other, '/offers', 409, { ...offerData, request_key: crypto.randomUUID() });
+        await request(buyer, '/offers', 409, { ...offerData, listing_version: '0', request_key: crypto.randomUUID() });
+        const [offerNotices] = await db.execute('SELECT id,user_id FROM notifications WHERE link=? ORDER BY id', [openedOffer]);
+        assert.deepEqual(offerNotices.map(row => row.user_id), [seller.id, buyer.id, seller.id]);
+        await request(seller, '/notifications/' + offerNotices[0].id + '/open', 302);
+        await request(other, '/notifications/' + offerNotices[0].id + '/open', 404);
+        await request(seller, '/listings/' + negotiable + '/edit', 302, { ...negotiableEdit, bargaining_enabled: '0' });
+        const [[disabledOfferListing]] = await db.execute('SELECT bargaining_enabled,review_version FROM listings WHERE id=?', [negotiable]);
+        assert.equal(disabledOfferListing.bargaining_enabled, 0);
+        await request(admin, '/admin/moderation/' + negotiable, 303, form(disabledOfferListing.review_version,'approve'));
+        assert.doesNotMatch((await request(buyer, negotiablePath, 200)).html, /data-open-price-offer/);
 
         const lockedCandidate = await listing('Locked pre-moderation item','draft');
         await request(seller,'/listings/' + lockedCandidate + '/publish',302,{});
@@ -1066,4 +1219,4 @@ async function run() {
         await db.end();
     }
 }
-run().catch(error => { console.error(error.code || error.name, error.message); process.exitCode = 1; });
+verifyTestEnvironment().then(run).catch(error => { console.error(error.code || error.name, error.message); process.exitCode = 1; });

@@ -143,6 +143,18 @@
             <div class="card mb-3">
                 <div class="card-body">
 
+                    <% if (typeof isPublic !== 'undefined' && isPublic) { %>
+                        <div class="mb-2"><%- include('../partials/compare-button', { listing }) %></div>
+                    <% } %>
+                    <% if (listing.item_condition) { %><p>Состояние: <%= listing.item_condition %></p><% } %>
+                    <% if (typeof priceAlert === 'boolean') { %>
+                        <form action="/listings/<%= listing.id %>/price-alert" method="post" class="mb-2">
+                            <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                            <button class="btn btn-sm btn-outline-secondary" name="enabled" value="<%= priceAlert ? 'no' : 'yes' %>">
+                                <%= priceAlert ? 'Отключить уведомления о цене' : 'Сообщать о снижении цены' %>
+                            </button>
+                        </form>
+                    <% } %>
                     <div class="listing-price-row mb-3">
                         <div class="listing-price">
                             <%= Number(listing.price).toLocaleString('ru-RU') %>
@@ -206,6 +218,10 @@
                                 <% } %>
                                 <button type="submit" class="btn btn-primary w-100">Запросить покупку</button>
                             </form>
+                            <% if (typeof offerRequestKey !== 'undefined' && offerRequestKey) { %>
+                                <button type="button" class="btn btn-outline-primary w-100 mt-2" aria-haspopup="dialog"
+                                        aria-controls="price-offer-dialog" data-open-price-offer>Предложить свою цену</button>
+                            <% } %>
                             <form action="/messages/start" method="POST" class="mt-3">
                                 <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
                                 <input type="hidden" name="listing_id" value="<%= listing.id %>">
@@ -248,8 +264,43 @@
         </details>
     </section>
 <% } %>
+<% if (typeof related !== 'undefined' && related) { %>
+    <%- include('../partials/listing-strip', { listings: related, heading: 'Похожие объявления', headingId: 'similar-title', more: null }) %>
+<% } %>
 <%- include('../partials/recent-listings', { listings: typeof recentListings === 'undefined' ? [] : recentListings, listingPath: typeof listingPath === 'undefined' ? null : listingPath }) %>
+<% if (typeof priceHistory !== 'undefined' && priceHistory.length) { %>
+    <section class="container my-4">
+        <h2 class="h4">История опубликованных цен</h2>
+        <% if (isPublic && priceHistory[0].is_drop) { %><p class="badge text-bg-success">Цена снижена</p><% } %>
+        <ul class="list-group">
+            <% for (const entry of priceHistory) { %>
+                <li class="list-group-item"><%= new Date(entry.published_at).toLocaleDateString('ru-RU') %> ·
+                    <%= Number(entry.price).toLocaleString('ru-RU') %> <%= entry.currency %></li>
+            <% } %>
+        </ul>
+    </section>
+<% } %>
+<% if (typeof offerRequestKey !== 'undefined' && offerRequestKey) { %>
+    <dialog id="price-offer-dialog" class="offer-dialog border rounded-3 shadow p-3" aria-labelledby="price-offer-title">
+        <h2 id="price-offer-title" class="h5">Предложить цену</h2>
+        <form method="post" action="/offers">
+            <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+            <input type="hidden" name="listing_id" value="<%= listing.id %>">
+            <input type="hidden" name="listing_version" value="<%= listing.review_version %>">
+            <input type="hidden" name="currency" value="<%= listing.currency %>">
+            <input type="hidden" name="request_key" value="<%= offerRequestKey %>">
+            <label for="offer-amount" class="form-label">Ваша цена, <%= listing.currency %></label>
+            <input id="offer-amount" class="form-control mb-3" name="amount" inputmode="decimal" maxlength="13" required autofocus>
+            <button class="btn btn-primary w-100">Отправить предложение</button>
+        </form>
+        <form method="dialog"><button class="btn btn-outline-secondary w-100 mt-2">Закрыть</button></form>
+    </dialog>
+    <script src="/js/price-offer.js" defer></script>
+<% } %>
 <script src="/js/seller-phone.js" defer></script>
+<% if (typeof isPublic !== 'undefined' && isPublic) { %>
+    <script src="/js/listing-view-count.js" data-id="<%= listing.id %>" defer></script>
+<% } %>
 <% if (typeof recordView !== 'undefined' && recordView) { %>
     <script src="/js/recently-viewed.js" data-listing-id="<%= listing.id %>" defer></script>
 <% } %>

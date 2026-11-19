@@ -186,15 +186,20 @@
                         </div>
 
                         <div class="mb-4">
-                            <label class="form-label fw-semibold">
-                                Описание
-                            </label>
+                            <label class="form-label" for="item-condition">Состояние товара</label>
+                            <input class="form-control mb-3" id="item-condition" name="item_condition" maxlength="80">
+                            <label class="form-label fw-semibold" for="listing-description">Описание и характеристики</label>
                             <textarea
+                                id="listing-description"
                                 name="description"
                                 class="form-control"
                                 rows="6"
                                 placeholder="Опишите товар, его состояние и особенности"
                                 required></textarea>
+                            <label class="form-check mt-3">
+                                <input type="checkbox" class="form-check-input" name="bargaining_enabled" value="1">
+                                <span class="form-check-label">Разрешить предложения цены</span>
+                            </label>
                         </div>
 
 

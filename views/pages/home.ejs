@@ -68,6 +68,7 @@
     <% } %>
 </section>
 
+<%- include('../partials/listing-strip', { listings: recommended, heading: 'Вам может понравиться', headingId: 'recommendations-title', more: '/recommendations' }) %>
 <%- include('../partials/recent-listings', { listings: typeof recentListings === 'undefined' ? [] : recentListings }) %>
 
 <footer class="bg-white border-top py-4">

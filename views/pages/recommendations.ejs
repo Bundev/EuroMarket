@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <%- include('../partials/head', { pageTitle: 'Рекомендации' }) %>
+    <script src="/js/listing-view.js"></script>
+</head>
+<body>
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<div class="container py-4 <%= user ? 'account-layout' : '' %>">
+    <% if (user) { %><%- include('../partials/account-nav', { activeAccountPage: '/recommendations' }) %><% } %>
+    <main class="account-content">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <h1 class="h3 mb-0">Рекомендации</h1>
+            <% if (listings.length) { %><%- include('../partials/listing-view-toggle') %><% } %>
+        </div>
+        <p class="text-muted"><%= selectedCountryInfo?.name || 'Все страны' %> · Объявлений: <%= total %></p>
+        <% if (listings.length) { %>
+            <form method="get" action="/recommendations" class="d-flex flex-wrap align-items-end gap-2 mb-3">
+                <div><label for="recommend-sort" class="form-label">Сортировка</label>
+                    <select class="form-select" id="recommend-sort" name="sort">
+                        <option value="relevance" <%= sort === 'relevance' ? 'selected' : '' %>>По релевантности</option>
+                        <option value="newest" <%= sort === 'newest' ? 'selected' : '' %>>По новизне</option>
+                    </select>
+                </div>
+                <button class="btn btn-outline-primary" type="submit">Применить</button>
+            </form>
+            <div class="search-results-list">
+                <% for (const listing of listings) { %><%- include('../partials/search-listing-card', { listing }) %><% } %>
+            </div>
+            <%- include('../partials/account-pagination', { page, totalPages, linkTo }) %>
+        <% } else { %><p>Пока нет подходящих объявлений.</p><% } %>
+    </main>
+</div>
+</body>
+</html>

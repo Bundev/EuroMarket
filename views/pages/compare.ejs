@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Сравнение объявлений' }) %></head>
+<body>
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<main class="container py-4" data-compare-page>
+    <h1 class="h3">Сравнение объявлений</h1>
+    <% if (!listings.length) { %>
+        <p><%= hasSelection ? 'Выбранные объявления больше недоступны.' : 'Выберите до четырёх объявлений для сравнения.' %></p>
+        <a href="/search">Перейти к объявлениям</a>
+    <% } else { %>
+        <% if (new Set(listings.map(item => item.currency)).size > 1) { %>
+            <p>Цены указаны в исходных валютах без пересчёта.</p>
+        <% } %>
+        <div class="row row-cols-1 row-cols-sm-2 row-cols-xl-4 g-3">
+            <% for (const item of listings) { %>
+                <div class="col">
+                    <article class="card card-body h-100 text-break">
+                        <h2 class="h5"><a href="<%= listingPath(item) %>"><%= item.title %></a></h2>
+                        <dl>
+                            <dt>Цена</dt><dd><%= Number(item.price).toLocaleString('ru-RU') %> <%= item.currency %></dd>
+                            <dt>Состояние товара</dt><dd><%= item.item_condition || 'Не указано' %></dd>
+                            <dt>Местоположение</dt><dd><%= [item.city, item.country].filter(Boolean).join(', ') %></dd>
+                            <dt>Категория</dt><dd><%= item.category %></dd>
+                            <dt>Характеристики</dt><dd class="compare-description"><%= item.description %></dd>
+                        </dl>
+                        <button class="btn btn-outline-secondary mt-auto" type="button" data-remove-comparison="<%= item.id %>">Убрать из сравнения</button>
+                    </article>
+                </div>
+            <% } %>
+        </div>
+    <% } %>
+</main>
+</body>
+</html>

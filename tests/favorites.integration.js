@@ -1,4 +1,4 @@
-require('dotenv').config({ quiet: true });
+const verifyTestEnvironment = require('./test-environment');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -174,7 +174,7 @@ async function run() {
     }
 }
 
-run().catch(error => {
+verifyTestEnvironment().then(run).catch(error => {
     console.error(error.code || error.name, error.message);
     process.exitCode = 1;
 });

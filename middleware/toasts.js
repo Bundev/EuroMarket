@@ -17,6 +17,8 @@ function backUrl(req) {
     if (req.path.startsWith('/recently-viewed')) return '/recently-viewed';
     if (req.path === '/following/settings') return '/following';
     if (req.path.startsWith('/saved-searches')) return '/saved-searches';
+    const offer = /^\/offers(?:\/([1-9]\d{0,9})(?:\/(?:reply|checkout))?)?$/.exec(req.path);
+    if (offer) return offer[1] ? '/offers/' + offer[1] : '/offers';
     if (/^\/deals\/[1-9]\d{0,9}$/.test(req.path)) return req.path;
     const dispute = /^\/((?:deals|disputes)\/[1-9]\d{0,9})\/(?:disputes|reply)$/.exec(req.path);
     if (dispute) return '/' + dispute[1];

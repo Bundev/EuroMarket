@@ -40,6 +40,10 @@ async function open(req, res) {
     const reviews = link && /^\/users\/([1-9]\d*)\/reviews$/.exec(link);
     const deal = link && /^\/(?:deals|my-purchases)\/([1-9]\d{0,9})$/.exec(link);
     const dispute = link && /^\/disputes\/([1-9]\d{0,9})$/.exec(link);
+    const offer = link && /^\/offers\/([1-9]\d{0,9})$/.exec(link);
+    if (offer && Number(offer[1]) <= 4294967295) {
+        permitted = Boolean(await require('../models/negotiation.model').details(Number(offer[1]), req.session.user.id));
+    }
     if (dispute && Number(dispute[1]) <= 4294967295) {
         permitted = Boolean(await disputes.findVisible(Number(dispute[1]), req.session.user.id, false));
     }

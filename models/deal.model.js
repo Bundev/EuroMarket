@@ -13,12 +13,12 @@ async function lockParties(connection, buyer, seller) {
 
 async function lockListing(connection, listingId) {
     const [[listing]] = await connection.execute(
-        'SELECT id, user_id, title, status, moderation_locked, price, currency FROM listings WHERE id=? FOR UPDATE', [listingId]
+        'SELECT id,user_id,title,status,moderation_locked,price,currency,bargaining_enabled,review_version FROM listings WHERE id=? FOR UPDATE', [listingId]
     );
     return listing;
 }
 
-async function requestPurchase(listingId, buyer, requestKey) {
+async function requestPurchase(listingId, buyer, requestKey, negotiationId) {
     const [[initial]] = await db.execute('SELECT user_id FROM listings WHERE id=?', [listingId]);
     if (!initial || Number(initial.user_id) === buyer) fail('Объявление недоступно для покупки.', 404);
     const seller = Number(initial.user_id);
@@ -40,14 +40,32 @@ async function requestPurchase(listingId, buyer, requestKey) {
         if (existing) fail('У вас уже есть открытый запрос по этому объявлению.');
         const [[reserved]] = await connection.execute('SELECT id FROM deals WHERE reserved_listing_id=? FOR UPDATE', [listingId]);
         if (reserved) fail('Объявление уже зарезервировано.');
+        let price = listing.price;
+        let agreement;
+        if (negotiationId) {
+            [[agreement]] = await connection.execute(
+                `SELECT amount,version FROM price_negotiations
+                 WHERE id=? AND listing_id=? AND buyer_id=? AND seller_id=? AND status='accepted'
+                   AND listing_version=? AND currency=? AND updated_at>CURRENT_TIMESTAMP(3)-INTERVAL 7 DAY FOR UPDATE`,
+                [negotiationId, listingId, buyer, seller, listing.review_version, listing.currency]);
+            if (!agreement || !listing.bargaining_enabled) fail('Договорённость больше недоступна.');
+            price = agreement.amount;
+        }
         const [insert] = await connection.execute(
             'INSERT INTO deals(listing_id,buyer_id,seller_id,price,currency,purchase_request_key) VALUES (?,?,?,?,?,?)',
-            [listingId, buyer, seller, listing.price, listing.currency, requestKey]
+            [listingId, buyer, seller, price, listing.currency, requestKey]
         );
         await insertDealEvent(
             connection, seller, insert.insertId, 'requested',
-            `Новый запрос на покупку «${listing.title}» · ${listing.price} ${listing.currency}`
+            `Новый запрос на покупку «${listing.title}» · ${price} ${listing.currency}`
         );
+        if (agreement) {
+            await connection.execute("UPDATE price_negotiations SET status='converted',deal_id=?,version=version+1 WHERE id=?",
+                [insert.insertId, negotiationId]);
+            await connection.execute(
+                "INSERT INTO price_negotiation_events (negotiation_id,version,actor_id,action,amount) VALUES (?,?,?,'converted',?)",
+                [negotiationId, agreement.version + 1, buyer, price]);
+        }
         return insert.insertId;
     });
 }
@@ -200,4 +218,5 @@ async function hasCompletedPurchase(listingId, userId) {
     return rows.length > 0;
 }
 
-module.exports = { list, findDetails, findParticipantDeal, requestPurchase, transition, hasCompletedPurchase, declinePendingForListing };
+module.exports = { list, findDetails, findParticipantDeal, requestPurchase, transition, hasCompletedPurchase, declinePendingForListing,
+    lockParties, lockListing };

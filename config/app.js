@@ -27,6 +27,8 @@ module.exports = function createApp({ settings, trustedProxies, sessionMiddlewar
     app.use(require('../routes/follow.routes'));
     app.use(require('../routes/listing.routes'));
     app.use(require('../routes/recentlyViewed.routes'));
+    app.use(require('../routes/marketplaceTools.routes'));
+    app.use(require('../routes/negotiation.routes'));
     app.use(require('../routes/search.routes'));
     app.use(require('../routes/savedSearch.routes'));
     app.use(require('../routes/city.routes'));

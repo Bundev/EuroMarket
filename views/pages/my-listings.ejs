@@ -145,7 +145,7 @@
                                                 </span>
 
                                             <% } %>
-                                            <br>
+                                            <%- include('../partials/seller-metrics', { metrics: listing, summary: false }) %>
                                             <% if (['draft', 'active', 'pending_review', 'rejected'].includes(listing.status)) { %>
                                                 <a href="/listings/<%= listing.id %>/edit"
                                                 class="btn btn-outline-primary btn-sm mt-3">

@@ -62,7 +62,7 @@ router.get('/sitemap-:name.xml', async (req, res, next) => {
 router.get('/robots.txt', (req, res) => {
     res.removeHeader('X-Robots-Tag');
     const privatePaths = ['/profile', '/my-listings', '/my-purchases', '/deals', '/disputes', '/admin', '/messages', '/notifications',
-        '/following', '/saved-searches', '/recently-viewed', '/favorites', '/api/', '/login', '/register', '/logout',
+        '/following', '/saved-searches', '/recently-viewed', '/recommendations', '/compare', '/seller-stats', '/offers', '/favorites', '/api/', '/login', '/register', '/logout',
         '/listings/create', '/listings/*/edit'];
     res.type('text/plain').send(['User-agent: *', ...privatePaths.map(path => 'Disallow: ' + path),
         '', 'Sitemap: ' + seo.absolute(res, '/sitemap.xml'), ''].join('\n'));
