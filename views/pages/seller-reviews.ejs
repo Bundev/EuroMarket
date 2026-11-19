@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="<%= typeof contentLocale === 'undefined' ? 'ru' : contentLocale.language %>">
+<head><%- include('../partials/head', { pageTitle: 'Отзывы о продавце' }) %></head>
+<body class="bg-light">
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<main class="container py-4 review-page">
+    <p><a href="/users/<%= seller.id %>">← Профиль продавца</a></p>
+    <h1 class="h3">Отзывы о продавце <%= seller.name %></h1>
+    <p class="mb-4"><%- include('../partials/seller-rating', { rating }) %></p>
+    <% for (const review of reviews) { %>
+        <article class="card card-body mb-3">
+            <div class="d-flex flex-wrap justify-content-between gap-2">
+                <h2 class="h6 mb-0"><%= review.author %></h2>
+                <span aria-label="Оценка <%= review.rating %> из 5"><span aria-hidden="true" class="text-warning"><%= '★'.repeat(review.rating) %><%= '☆'.repeat(5 - review.rating) %></span></span>
+            </div>
+            <p class="small text-muted mt-1 mb-2"><%= new Date(review.created_at).toLocaleDateString('ru-RU') %><%= review.updated_at ? ' · изменён' : '' %></p>
+            <% if (review.comment) { %><p class="review-comment mb-2"><%= review.comment %></p><% } %>
+            <% if (user && Number(user.id) !== Number(review.buyer_id)) { %>
+                <details>
+                    <summary>Пожаловаться на отзыв</summary>
+                    <form method="post" action="/reviews/<%= review.deal_id %>/report" class="mt-2">
+                        <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                        <label class="form-label" for="report-reason-<%= review.deal_id %>">Причина жалобы</label>
+                        <textarea class="form-control mb-2" id="report-reason-<%= review.deal_id %>" name="reason" maxlength="500" required></textarea>
+                        <button class="btn btn-outline-secondary">Отправить жалобу</button>
+                    </form>
+                </details>
+            <% } %>
+        </article>
+    <% } %>
+    <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => '/users/' + seller.id + '/reviews?page=' + value }) %>
+</main>
+</body>
+</html>

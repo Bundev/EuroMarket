@@ -1,0 +1,259 @@
+
+<!DOCTYPE html>
+<html lang="<%= typeof contentLocale === 'undefined' ? 'ru' : contentLocale.language %>">
+<head>
+    <%- include('../partials/head', {
+        pageTitle: isFavoritesPage ? 'Избранное' : category ? category.name : 'Поиск объявлений'
+    }) %>
+    <script src="/js/listing-view.js"></script>
+</head>
+<body>
+<%- include('../partials/toasts') %>
+
+<%- include('../partials/header') %>
+
+<main class="container py-4" <%- isFavoritesPage ? 'data-favorites-page' : '' %>>
+
+    <% if (category) { %>
+        <nav aria-label="Хлебные крошки">
+            <ol class="breadcrumb flex-wrap">
+                <li class="breadcrumb-item"><a href="/">Главная</a></li>
+                <% breadcrumbs.forEach(item => { %>
+                    <% if (Number(item.id) === Number(category.id)) { %>
+                        <li class="breadcrumb-item active" aria-current="page"><%= item.name %></li>
+                    <% } else { %>
+                        <li class="breadcrumb-item"><a href="<%= categoryLink(item.slug) %>"><%= item.name %></a></li>
+                    <% } %>
+                <% }) %>
+            </ol>
+        </nav>
+    <% } %>
+    <h2 class="fw-bold mb-4"><%= isFavoritesPage ? 'Избранное' : category ? category.name : 'Поиск объявлений' %></h2>
+    <% if (isFavoritesPage && unavailableFavorites > 0) { %>
+        <div class="alert alert-info" role="status">
+            Недоступные объявления скрыты (<%= unavailableFavorites %>).
+            Они появятся здесь, если снова будут опубликованы.
+        </div>
+    <% } %>
+
+    <% if (category && subcategories.length) { %>
+        <nav class="d-flex flex-wrap gap-2 mb-4" aria-label="Подкатегории">
+            <% subcategories.forEach(item => { %>
+                <a class="btn btn-outline-primary" href="<%= categoryLink(item.slug) %>"><%= item.name %></a>
+            <% }) %>
+        </nav>
+    <% } %>
+
+ 
+<form action="<%= searchAction %>" method="GET"
+      class="search-filter-form mb-4">
+
+    <% if (category || isFavoritesPage) { %>
+    <div class="mb-3">
+        <label for="searchQuery" class="form-label">
+            <%= isFavoritesPage ? 'Поиск в избранном' : 'Поиск в категории' %>
+        </label>
+
+        <input
+            type="search"
+            name="search"
+            id="searchQuery"
+            class="form-control"
+            placeholder="Название товара или услуги"
+            value="<%= search %>"
+            maxlength="100"
+        >
+    </div>
+    <% } else { %>
+        <input type="hidden" name="search" value="<%= search %>" data-search-filter-query>
+    <% } %>
+
+    <div class="row g-3 mb-3">
+
+        <div class="col-md-6">
+            <label for="searchCountry" class="form-label">
+                Страна
+            </label>
+
+            <select
+                name="country_id"
+                id="searchCountry"
+                class="form-select"
+            >
+                <option value="">Все страны</option>
+
+                <% countries.forEach(country => { %>
+                    <option
+                        value="<%= country.id %>"
+                        <%= countryId !== null &&
+                            Number(countryId) === Number(country.id)
+                            ? 'selected' : '' %>
+                    >
+                        <%= country.name %>
+                    </option>
+                <% }) %>
+            </select>
+        </div>
+
+        <div class="col-md-6">
+            <label for="searchCity" class="form-label">
+                Город
+            </label>
+
+            <select
+                name="city_id"
+                id="searchCity"
+                class="form-select"
+                data-selected-city="<%= cityId || '' %>"
+                disabled
+            >
+                <option value="">Все города</option>
+            </select>
+        </div>
+
+    </div>
+
+    <div class="row g-3 mb-3">
+        <% if (!category) { %>
+        <div class="col-md-6">
+            <label for="searchCategory" class="form-label">Категория</label>
+            <select id="searchCategory" name="category_id" class="form-select">
+                <option value="">Все категории</option>
+                <% categories.forEach(category => { %>
+                    <option value="<%= category.id %>" <%= categoryId === Number(category.id) ? 'selected' : '' %>>
+                        <%= category.name %>
+                    </option>
+                <% }) %>
+            </select>
+        </div>
+        <% } %>
+
+        <div class="col-md-6">
+            <label for="searchSort" class="form-label">Сортировка</label>
+            <select id="searchSort" name="sort" class="form-select">
+                <option value="newest" <%= sort === 'newest' ? 'selected' : '' %>>Сначала новые</option>
+                <option value="oldest" <%= sort === 'oldest' ? 'selected' : '' %>>Сначала старые</option>
+                <option value="price_asc" <%= sort === 'price_asc' ? 'selected' : '' %>>Сначала дешевле</option>
+                <option value="price_desc" <%= sort === 'price_desc' ? 'selected' : '' %>>Сначала дороже</option>
+            </select>
+        </div>
+
+        <div class="col-md-4">
+            <label for="searchCurrency" class="form-label">Валюта</label>
+            <select id="searchCurrency" name="currency" class="form-select" aria-describedby="searchCurrencyHelp">
+                <option value="">Все валюты</option>
+                <% currencies.forEach(code => { %>
+                    <option value="<%= code %>" <%= currency === code ? 'selected' : '' %>><%= code %></option>
+                <% }) %>
+            </select>
+            <div id="searchCurrencyHelp" class="form-text">
+                Выберите валюту для фильтрации или сортировки по цене.
+            </div>
+        </div>
+
+        <div class="col-6 col-md-4">
+            <label for="searchMinPrice" class="form-label">Цена от</label>
+            <input id="searchMinPrice" name="min_price" class="form-control"
+                   type="text" inputmode="decimal" maxlength="13" value="<%= minPriceInput %>">
+        </div>
+
+        <div class="col-6 col-md-4">
+            <label for="searchMaxPrice" class="form-label">Цена до</label>
+            <input id="searchMaxPrice" name="max_price" class="form-control"
+                   type="text" inputmode="decimal" maxlength="13" value="<%= maxPriceInput %>">
+        </div>
+    </div>
+
+    <% if (filterError) { %>
+        <div class="alert alert-danger" role="alert"><%= filterError %></div>
+    <% } %>
+
+    <button type="submit"
+            class="btn btn-primary search-filter-submit">
+        Найти объявления
+    </button>
+
+</form>
+
+
+    <% if (!filterError) { %>
+
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+        <h5 class="mb-0">
+            <%= search ? 'Результаты поиска: «' + search + '»' : 'Результаты поиска' %>
+            <span class="text-muted">(<span id="searchTotal"><%= total %></span>)</span>
+        </h5>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <% if (typeof saveFields !== 'undefined' && saveFields) { %>
+                <form method="post" action="/saved-searches">
+                    <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                    <%- include('../partials/saved-search-fields', { fields: saveFields }) %>
+                    <button type="submit" class="btn btn-outline-primary">Сохранить поиск</button>
+                </form>
+            <% } %>
+            <%- include('../partials/listing-view-toggle') %>
+        </div>
+        </div>
+
+        <% if (listings.length > 0) { %>
+
+
+            <div class="search-results-list">
+
+                <% listings.forEach(listing => { %>
+
+                    <%- include('../partials/search-listing-card', { listing }) %>
+
+                <% }) %>
+
+            </div>
+
+            <% if (totalPages > 1) { %>
+                <nav class="mt-4" aria-label="Страницы результатов поиска">
+                    <ul class="pagination search-pagination justify-content-center">
+                        <li class="page-item <%= page === 1 ? 'disabled' : '' %>">
+                            <% if (page > 1) { %>
+                                <a class="page-link" href="<%= pageUrl(page - 1) %>" rel="prev">Назад</a>
+                            <% } else { %>
+                                <span class="page-link" aria-disabled="true">Назад</span>
+                            <% } %>
+                        </li>
+                        <% paginationItems.forEach(number => { %>
+                            <% if (number === null) { %>
+                                <li class="page-item disabled"><span class="page-link">…</span></li>
+                            <% } else if (number === page) { %>
+                                <li class="page-item active"><span class="page-link" aria-current="page"><%= number %></span></li>
+                            <% } else { %>
+                                <li class="page-item"><a class="page-link" href="<%= pageUrl(number) %>" aria-label="Страница <%= number %>"><%= number %></a></li>
+                            <% } %>
+                        <% }) %>
+                        <li class="page-item <%= page === totalPages ? 'disabled' : '' %>">
+                            <% if (page < totalPages) { %>
+                                <a class="page-link" href="<%= pageUrl(page + 1) %>" rel="next">Вперёд</a>
+                            <% } else { %>
+                                <span class="page-link" aria-disabled="true">Вперёд</span>
+                            <% } %>
+                        </li>
+                    </ul>
+                </nav>
+            <% } %>
+
+        <% } else { %>
+
+            <div class="text-center py-5">
+                <h5>Ничего не найдено</h5>
+                <p class="text-muted">
+                    Попробуйте изменить запрос или фильтры.
+                </p>
+            </div>
+
+        <% } %>
+
+    <% } %>
+
+</main>
+
+<script src="/js/search-location.js"></script>
+
+</body>
+</html>

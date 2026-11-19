@@ -1,0 +1,12 @@
+<nav class="account-nav" aria-label="Личный кабинет">
+    <% for (const [href, label] of [
+        ['/profile', 'Мой профиль'], ['/my-listings', 'Мои объявления'],
+        ['/my-purchases', 'Мои покупки'], ['/favorites', 'Избранное'], ['/following', 'Подписки'],
+        ['/following/feed', 'Лента подписок'], ['/saved-searches', 'Сохранённые поиски'],
+        ['/recently-viewed', 'Недавно просмотренные'],
+        ['/messages', 'Сообщения'], ['/notifications', 'Уведомления']
+    ]) { %>
+        <a class="nav-link <%= href === activeAccountPage ? 'active' : '' %>"
+           aria-current="<%= href === activeAccountPage ? 'page' : 'false' %>" href="<%= href %>"><%= label %></a>
+    <% } %>
+</nav>

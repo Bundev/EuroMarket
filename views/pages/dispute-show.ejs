@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Спор №' + dispute.id }) %></head>
+<body class="bg-light">
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<main class="container py-4 dispute-page">
+    <div class="d-flex flex-wrap gap-3 mb-3">
+        <a href="/deals/<%= dispute.deal_id %>">← К сделке №<%= dispute.deal_id %></a>
+        <% if (user.role === 'admin') { %><a href="/admin/disputes">К списку споров</a><% } %>
+    </div>
+    <h1 class="h3 mb-3">Спор №<%= dispute.id %></h1>
+    <div class="dispute-grid">
+        <section class="card card-body" aria-labelledby="dispute-history">
+            <h2 class="h5" id="dispute-history">История спора</h2>
+            <ol class="deal-timeline list-unstyled mt-2">
+                <% for (const item of items) { %>
+                    <li>
+                        <strong><%= actions[item.action] %></strong>
+                        <p class="small text-muted mb-1">
+                            <%= item.actor_name %> · <time datetime="<%= item.created_at.toISOString() %>"><%= item.created_at.toLocaleString('ru-RU') %></time>
+                        </p>
+                        <p class="dispute-message mb-1"><%= item.body %></p>
+                    </li>
+                <% } %>
+            </ol>
+            <%- include('../partials/account-pagination', { page, totalPages: pages, linkTo: value => '/disputes/' + dispute.id + '?page=' + value }) %>
+            <% if (replyKey) { %>
+                <form class="border-top pt-3" method="post" action="/disputes/<%= dispute.id %>/reply">
+                    <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                    <input type="hidden" name="request_key" value="<%= replyKey %>">
+                    <label class="form-label" for="dispute-reply">Добавить сообщение</label>
+                    <textarea class="form-control mb-2" id="dispute-reply" name="body" rows="3" maxlength="2000" required></textarea>
+                    <button class="btn btn-primary" type="submit">Отправить</button>
+                </form>
+            <% } %>
+        </section>
+        <section class="card card-body" aria-labelledby="dispute-summary">
+            <h2 class="h5" id="dispute-summary">Сведения о споре</h2>
+            <p class="mb-2"><span class="badge text-bg-secondary text-wrap"><%= statuses[dispute.status] %></span></p>
+            <p class="mb-2"><%= reasons[dispute.reason] %></p>
+            <% if (images.length) { %>
+                <h3 class="h6 mt-2">Фотографии</h3>
+                <div class="dispute-evidence">
+                    <% for (const image of images) { const url = '/disputes/' + dispute.id + '/images/' + image.position; %>
+                        <a href="<%= url %>"><img class="rounded" src="<%= url %>" alt="Доказательство <%= image.position %>" loading="lazy"></a>
+                    <% } %>
+                </div>
+            <% } %>
+            <% if (decisionKey) { %>
+                <form class="border-top pt-3 mt-3" method="post" action="/admin/disputes/<%= dispute.id %>">
+                    <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                    <input type="hidden" name="request_key" value="<%= decisionKey %>">
+                    <input type="hidden" name="version" value="<%= dispute.version %>">
+                    <label class="form-label" for="dispute-action">Действие администратора</label>
+                    <select class="form-select mb-2" id="dispute-action" name="action" required>
+                        <option value="">Выберите действие</option>
+                        <option value="request_info">Запросить информацию</option>
+                        <option value="resolve">Закрыть с решением</option>
+                        <option value="reject">Отклонить спор</option>
+                    </select>
+                    <label class="form-label" for="dispute-decision">Комментарий для обеих сторон</label>
+                    <textarea class="form-control mb-2" id="dispute-decision" name="body" rows="3" maxlength="500" required></textarea>
+                    <button class="btn btn-primary" type="submit">Сохранить</button>
+                </form>
+            <% } %>
+        </section>
+    </div>
+</main>
+</body>
+</html>

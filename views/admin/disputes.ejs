@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Споры' }) %></head>
+<body class="bg-light">
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<main class="container py-4">
+    <%- include('./nav', { section }) %>
+    <h1 class="h3 mb-3">Споры по сделкам</h1>
+    <form method="get" class="row g-2 align-items-end mb-3">
+        <div class="col-sm"><label class="form-label" for="filter-status">Статус</label>
+            <select class="form-select" name="status" id="filter-status">
+                <% for (const [value, label] of Object.entries({ active: 'Все открытые', all: 'Все статусы', ...statuses })) { %>
+                    <option value="<%= value %>" <%= filters.status === value ? 'selected' : '' %>><%= label %></option>
+                <% } %>
+            </select>
+        </div>
+        <div class="col-sm"><label class="form-label" for="filter-reason">Причина</label>
+            <select class="form-select" name="reason" id="filter-reason">
+                <option value="">Все причины</option>
+                <% for (const [value, label] of Object.entries(reasons)) { %>
+                    <option value="<%= value %>" <%= filters.reason === value ? 'selected' : '' %>><%= label %></option>
+                <% } %>
+            </select>
+        </div>
+        <div class="col-sm-2"><label class="form-label" for="filter-deal">№ сделки</label>
+            <input class="form-control" id="filter-deal" name="deal" inputmode="numeric" value="<%= filters.dealId || '' %>">
+        </div>
+        <div class="col-sm-auto"><button class="btn btn-primary" type="submit">Применить</button></div>
+    </form>
+    <% if (!items.length) { %><p class="card card-body">Споры не найдены.</p><% } %>
+    <ul class="list-group mb-3">
+        <% for (const item of items) { %>
+            <li class="list-group-item d-flex flex-wrap justify-content-between gap-2">
+                <div>
+                    <a href="/disputes/<%= item.id %>">Спор №<%= item.id %></a> · сделка №<%= item.deal_id %>
+                    <span class="d-block text-muted small"><%= reasons[item.reason] %> · <%= item.created_at.toLocaleDateString('ru-RU') %></span>
+                </div>
+                <span class="badge text-bg-secondary align-self-start text-wrap"><%= statuses[item.status] %></span>
+            </li>
+        <% } %>
+    </ul>
+    <%- include('../partials/account-pagination', { page, totalPages: pages, linkTo: value => '/admin/disputes?' + new URLSearchParams({
+        status: filters.status, reason: filters.reason || '', deal: filters.dealId || '', page: value
+    }) }) %>
+</main>
+</body>
+</html>

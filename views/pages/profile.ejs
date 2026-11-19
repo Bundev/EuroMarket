@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Мой профиль' }) %></head>
+<body class="bg-light">
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<div class="container py-4 account-layout">
+    <%- include('../partials/account-nav', { activeAccountPage: '/profile' }) %>
+    <main class="account-content">
+
+        <h1 class="h3 mb-4">Мой профиль</h1>
+        <p><a href="/users/<%= user.id %>">Открыть мой публичный профиль</a></p>
+        <section class="card card-body mb-3" aria-labelledby="account-info">
+            <h2 class="h5" id="account-info">Личные данные</h2>
+            <p>Email: <%= user.email %></p>
+            <p>Дата регистрации: <%= new Date(user.created_at).toLocaleDateString('ru-RU') %></p>
+            <form action="/profile" method="POST">
+                <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                <label for="profile-name" class="form-label">Имя</label>
+                <input id="profile-name" class="form-control mb-3" name="name" value="<%= user.name %>" maxlength="100" autocomplete="name" required>
+                <button class="btn btn-primary">Сохранить имя</button>
+            </form>
+        </section>
+        <div class="card card-body">
+            <h2 class="h5">Настройки аккаунта</h2>
+            <section class="mb-4" aria-labelledby="contactSettingsTitle">
+                <h3 class="h5" id="contactSettingsTitle">Контактный телефон</h3>
+                <form action="/profile/phone" method="POST">
+                    <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                    <label for="profilePhone" class="form-label">Номер телефона</label>
+                    <input type="tel" id="profilePhone" name="phone" class="form-control mb-2"
+                           value="<%= user.phone || '' %>" maxlength="50" autocomplete="tel"
+                           aria-describedby="profilePhoneHelp">
+                    <p id="profilePhoneHelp" class="form-text">Международный формат, например +380 50 123 45 67. Пустое поле удаляет номер.</p>
+                    <div class="form-check mb-3">
+                        <input type="checkbox" id="phonePublic" name="phone_public" value="1"
+                               class="form-check-input" <%= user.phone_public ? 'checked' : '' %>>
+                        <label for="phonePublic" class="form-check-label">Разрешить показ телефона в активных объявлениях</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Сохранить телефон</button>
+                </form>
+            </section>
+
+            <section aria-labelledby="viewing-history-title">
+                <h3 class="h5" id="viewing-history-title">История просмотров</h3>
+                <p class="text-muted">Отключение останавливает сохранение новых просмотров. Сохранённую историю можно очистить на странице <a href="/recently-viewed">«Недавно просмотренные»</a>.</p>
+                <form action="/profile/viewing-history" method="post" class="d-flex flex-wrap align-items-end gap-2">
+                    <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                    <div>
+                        <label class="form-label" for="save-listing-history">Сохранять просмотренные объявления</label>
+                        <select class="form-select" id="save-listing-history" name="save_listing_history">
+                            <option value="on" <%= user.save_listing_history ? 'selected' : '' %>>Включено</option>
+                            <option value="off" <%= !user.save_listing_history ? 'selected' : '' %>>Выключено</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" type="submit">Сохранить настройку</button>
+                </form>
+            </section>
+        </div>
+    </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,43 @@
+const express = require('express');
+const path = require('node:path');
+const securityHeaders = require('../middleware/httpSecurity');
+const { notFound, handleError } = require('../middleware/httpErrors');
+
+module.exports = function createApp({ settings, trustedProxies, sessionMiddleware }) {
+    const app = express();
+    app.disable('x-powered-by');
+    app.set('trust proxy', trustedProxies);
+    app.set('view engine', 'ejs');
+    app.set('views', path.resolve(__dirname, '../views'));
+    app.use(securityHeaders(settings));
+    app.use(require('../middleware/publicAssets'));
+    app.use(require('../services/seo').init(settings.publicOrigin));
+    app.use(require('../routes/seo.routes'));
+    app.use(express.urlencoded({ extended: false }));
+    app.use(express.json());
+    app.use(require('../middleware/toasts'));
+    app.use(sessionMiddleware);
+    app.use('/uploads/listings', require('../services/listingImages').serve);
+    app.use(require('../middleware/authProtection'));
+    app.use(require('../middleware/pageContext'));
+
+    app.use(require('../routes/home.routes'));
+    app.use(require('../routes/auth.routes'));
+    app.use(require('../routes/profile.routes'));
+    app.use(require('../routes/follow.routes'));
+    app.use(require('../routes/listing.routes'));
+    app.use(require('../routes/recentlyViewed.routes'));
+    app.use(require('../routes/search.routes'));
+    app.use(require('../routes/savedSearch.routes'));
+    app.use(require('../routes/city.routes'));
+    app.use(require('../routes/favorite.routes'));
+    app.use(require('../routes/message.routes'));
+    app.use(require('../routes/notification.routes'));
+    app.use(require('../routes/admin.routes'));
+    app.use(require('../routes/deal.routes'));
+    app.use(require('../routes/dispute.routes'));
+    app.use(require('../routes/review.routes'));
+    app.use(notFound);
+    app.use(handleError);
+    return app;
+};

@@ -1,0 +1,17 @@
+<a href="<%= listingPath(listing) %>" class="text-decoration-none text-dark">
+    <div class="card h-100 marketplace-card">
+        <div class="marketplace-card-image">
+            <% if (listing.main_image) { %>
+                <img src="<%= listing.main_image %>" alt="<%= listing.title %>" loading="lazy">
+            <% } else { %>
+                <div class="marketplace-no-image">Нет фото</div>
+            <% } %>
+        </div>
+        <div class="card-body">
+            <h6 class="marketplace-card-title"><%= listing.title %></h6>
+            <div class="marketplace-price"><%= Number(listing.price).toLocaleString('ru-RU') %> <%= listing.currency %></div>
+            <% if (listing.category_name) { %><small class="text-muted"><%= listing.category_name %></small><% } %>
+        </div>
+    </div>
+</a>
+<%- include('./favorite-button', { listing, extraClass: 'favorite-home' }) %>

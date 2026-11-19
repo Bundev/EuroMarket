@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <%- include('../partials/head', { pageTitle: 'Подписки' }) %>
+    <script src="/js/follow.js" defer></script>
+</head>
+<body>
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<div class="container py-4 account-layout">
+    <%- include('../partials/account-nav', { activeAccountPage: '/following' }) %>
+    <main class="account-content">
+        <h1 class="h3 mb-3">Подписки</h1>
+        <form class="card card-body mb-4" method="post" action="/following/settings">
+            <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+            <div class="d-flex align-items-end flex-wrap gap-2">
+                <div>
+                    <label class="form-label" for="follow-notifications">Уведомления о новых объявлениях</label>
+                    <select class="form-select" id="follow-notifications" name="notify_followed_sellers">
+                        <option value="on" <%= notificationsEnabled ? 'selected' : '' %>>Включены</option>
+                        <option value="off" <%= !notificationsEnabled ? 'selected' : '' %>>Отключены</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" type="submit">Сохранить</button>
+            </div>
+        </form>
+        <p class="card card-body" data-follow-empty <%= sellers.length ? 'hidden' : '' %>>На этой странице нет подписок.</p>
+        <ul class="list-group" data-following-list>
+            <% for (const seller of sellers) { %>
+                <li class="list-group-item d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <a href="/users/<%= seller.id %>"><%= seller.name %></a>
+                    <%- include('../partials/follow-button', { sellerId: seller.id, following: true }) %>
+                </li>
+            <% } %>
+        </ul>
+        <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => '/following?page=' + value }) %>
+    </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,7 @@
+<article class="chat-message <%= message.mine ? 'chat-message-mine' : '' %>" data-message-id="<%= message.id %>" data-mine="<%= message.mine %>">
+    <p><%= message.body %></p>
+    <small>
+        <time><%= new Date(message.createdAt).toLocaleString('ru-RU') %></time>
+        <% if (message.mine) { %><span data-receipt><%= message.readAt ? 'Прочитано' : 'Отправлено' %></span><% } %>
+    </small>
+</article>

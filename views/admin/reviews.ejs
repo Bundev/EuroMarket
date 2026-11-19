@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Модерация отзывов' }) %></head>
+<body class="bg-light">
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<main class="container py-4 review-page">
+    <%- include('nav', { section: 'reviews' }) %>
+    <h1 class="h3">Модерация отзывов</h1>
+    <div class="d-flex gap-2 flex-wrap mb-3">
+        <a class="btn <%= complaintsOnly ? 'btn-primary' : 'btn-outline-primary' %>" href="/admin/reviews">Открытые жалобы</a>
+        <a class="btn <%= !complaintsOnly ? 'btn-primary' : 'btn-outline-primary' %>" href="/admin/reviews?filter=all">Все отзывы</a>
+    </div>
+    <% if (!reviews.length) { %><p>Отзывы по этому фильтру не найдены.</p><% } %>
+    <% for (const review of reviews) { %>
+        <article class="card card-body mb-3">
+            <h2 class="h6"><%= review.author %> → <a href="/users/<%= review.seller_id %>/reviews"><%= review.seller %></a></h2>
+            <p><%= review.rating %> из 5 · <%= review.hidden_at ? 'Скрыт' : 'Виден' %></p>
+            <% if (review.comment) { %><p class="review-comment"><%= review.comment %></p><% } %>
+            <p><a href="/admin/reviews/<%= review.deal_id %>/reports">Жалобы (открытых: <%= review.open_reports %>)</a></p>
+            <form method="post" action="/admin/reviews/<%= review.deal_id %>">
+                <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                <input type="hidden" name="request_key" value="<%= requestKey() %>">
+                <label class="form-label" for="mod-reason-<%= review.deal_id %>">Причина решения</label>
+                <input class="form-control mb-2" id="mod-reason-<%= review.deal_id %>" name="reason" required maxlength="500">
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-outline-primary" name="mode" value="<%= review.hidden_at ? 'restore' : 'hide' %>"><%= review.hidden_at ? 'Восстановить отзыв' : 'Скрыть отзыв' %></button>
+                    <% if (Number(review.open_reports)) { %><button class="btn btn-outline-secondary" name="mode" value="dismiss">Закрыть жалобы</button><% } %>
+                </div>
+            </form>
+        </article>
+    <% } %>
+    <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => '/admin/reviews?filter=' + (complaintsOnly ? 'open' : 'all') + '&page=' + value }) %>
+</main>
+</body>
+</html>

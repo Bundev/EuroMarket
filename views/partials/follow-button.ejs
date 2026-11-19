@@ -1,0 +1,11 @@
+<%
+    const onListing = typeof listingPage !== 'undefined' && listingPage;
+    const followLabel = onListing ? 'Подписаться на продавца' : 'Подписаться';
+    const followingLabel = onListing ? 'Вы подписаны' : 'Отписаться';
+%>
+<button class="btn <%= following ? 'btn-outline-primary' : 'btn-primary' %><%= onListing ? ' w-100' : '' %>" type="button"
+        data-follow-seller="<%= sellerId %>" aria-pressed="<%= String(following) %>"
+        data-follow-label="<%= followLabel %>" data-following-label="<%= followingLabel %>"
+        title="<%= following ? 'Отписаться от продавца' : 'Подписаться на продавца' %>">
+    <%= following ? followingLabel : followLabel %>
+</button>

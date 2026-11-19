@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Мои покупки' }) %></head>
+<body class="bg-light">
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<div class="container py-4 account-layout">
+    <%- include('../partials/account-nav', { activeAccountPage: '/my-purchases' }) %>
+    <main class="account-content">
+        <h1 class="h3 mb-3">Мои покупки</h1>
+        <nav class="nav nav-pills gap-2 mb-3" aria-label="Роль в сделке">
+            <a class="nav-link <%= side === 'buyer' ? 'active' : '' %>" aria-current="<%= side === 'buyer' ? 'page' : 'false' %>" href="/my-purchases">Покупки</a>
+            <a class="nav-link d-flex align-items-center gap-2 <%= side === 'seller' ? 'active' : '' %>" aria-current="<%= side === 'seller' ? 'page' : 'false' %>" href="/my-purchases?side=seller">
+                Продажи
+                <% if (pendingSalesCount > 0) { %>
+                    <span class="badge rounded-pill <%= side === 'seller' ? 'text-bg-light' : 'text-bg-primary' %>" data-pending-sales>
+                        <%= pendingSalesCount %><span class="visually-hidden"> в ожидании решения</span>
+                    </span>
+                <% } %>
+            </a>
+        </nav>
+        <p class="text-muted">Договоритесь о передаче товара с другой стороной. Оплата через EuroMarket не проводится.</p>
+        <% if (!deals.length) { %><p class="card card-body">В этом разделе пока нет сделок.</p><% } %>
+        <% for (const deal of deals) {
+            const seller = side === 'seller';
+            const needsDecision = seller && deal.status === 'requested';
+            const ownConfirmation = seller ? deal.seller_confirmed_at : deal.buyer_confirmed_at;
+            const otherConfirmation = seller ? deal.buyer_confirmed_at : deal.seller_confirmed_at;
+            const { available, actions } = actionState(deal, side);
+        %>
+            <article class="card card-body mb-3 <%= needsDecision ? 'border-primary border-start border-3' : '' %>" id="deal-<%= deal.id %>" data-deal-status="<%= deal.status %>">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                    <h2 class="h5 mb-0 text-break"><%= deal.title %></h2>
+                    <span class="badge <%= needsDecision ? 'bg-primary' : deal.status === 'completed' ? 'bg-success' : 'bg-secondary' %>"><%= needsDecision ? 'Требует решения' : statuses[deal.status] %></span>
+                </div>
+                <p class="fw-semibold mt-2 mb-1"><%= deal.price %> <%= deal.currency %></p>
+                <p class="text-muted mb-1"><%= seller ? 'Покупатель' : 'Продавец' %> · <%= seller ? deal.buyer_name : deal.seller_name %></p>
+                <p class="small text-muted mb-2"><%= deal.completed_at ? 'Дата сделки' : 'Дата запроса' %> · <%= new Date(deal.completed_at || deal.created_at).toLocaleDateString('ru-RU') %></p>
+                <p class="mb-2"><a href="/deals/<%= deal.id %>">Подробнее о сделке</a></p>
+                <% if (deal.active_dispute_id) { %><p class="mb-2"><a href="/disputes/<%= deal.active_dispute_id %>">Открыт спор</a></p><% } %>
+                <% if (seller || deal.listing_status === 'active' || (deal.status === 'completed' && available)) { %>
+                    <p class="mb-2"><a href="/listings/<%= deal.listing_id %>">Открыть объявление</a></p>
+                <% } %>
+                <% if (deal.status === 'accepted') { %>
+                    <p class="mb-2"><%= ownConfirmation ? 'Вы подтвердили передачу.' : 'Подтверждайте сделку только после передачи товара.' %>
+                        <%= otherConfirmation ? 'Вторая сторона подтвердила передачу.' : '' %></p>
+                <% } %>
+                <% if (!available && ['requested','accepted'].includes(deal.status)) { %><p class="text-danger mb-2">Сделка приостановлена из-за ограничения объявления или аккаунта.</p><% } %>
+                <%- include('../partials/deal-actions', { deal, actions }) %>
+                <% if (!seller && deal.status === 'completed' && deal.buyer_confirmed_at && deal.seller_confirmed_at && deal.completed_at) { %>
+                    <%- include('../partials/review-form', { deal }) %>
+                <% } %>
+            </article>
+        <% } %>
+        <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => '/my-purchases?side=' + side + '&page=' + value }) %>
+    </main>
+</div>
+</body>
+</html>

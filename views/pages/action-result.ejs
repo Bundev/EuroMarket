@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Результат действия — EuroMarket</title>
+    <link rel="stylesheet" href="/css/main.css">
+    <script src="/js/toasts.js" defer></script>
+</head>
+<body class="action-result-page">
+    <%- include('../partials/toasts') %>
+    <main class="action-result">
+        <a class="action-result-brand" href="/">EuroMarket</a>
+        <h1>Не удалось выполнить действие</h1>
+        <p>Проверьте уведомление и повторите попытку, когда будете готовы.</p>
+        <a class="action-result-back" href="<%= backUrl %>">Вернуться</a>
+    </main>
+</body>
+</html>

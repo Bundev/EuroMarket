@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Переписка' }) %></head>
+<body>
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<main class="container py-4 chat-page" data-chat-id="<%= chat.id %>">
+    <a href="/messages">Все диалоги</a>
+    <h1 class="h4 mt-3"><%= chat.other_name %></h1>
+    <% if (chat.listing_status === 'active') { %>
+        <a href="/listings/<%= chat.listing_id %>"><%= chat.listing_title %></a>
+    <% } else { %>
+        <p class="mb-2"><%= chat.listing_title %></p>
+        <p class="alert alert-info">Объявление удалено или снято с публикации. Переписка сохранена.</p>
+    <% } %>
+    <div class="chat-panel mt-3">
+        <button type="button" class="btn btn-outline-secondary mb-2" data-chat-older <%- history.hasMore ? '' : 'hidden' %>>Предыдущие сообщения</button>
+        <div class="chat-history" role="log" aria-label="Переписка" aria-live="polite" aria-relevant="additions">
+            <% history.messages.forEach(message => { %><%- include('../partials/chat-message', { message }) %><% }) %>
+        </div>
+        <p class="text-muted mt-2" data-chat-empty <%- history.messages.length ? 'hidden' : '' %>>Начните переписку.</p>
+        <button type="button" class="btn btn-outline-primary mt-2" data-chat-new hidden>Новые сообщения ↓</button>
+        <p class="small text-muted mt-2" data-chat-status role="status"></p>
+        <% if (chat.can_send) { %>
+            <form class="chat-compose mt-3">
+                <label for="messageBody" class="form-label">Сообщение</label>
+                <textarea id="messageBody" name="body" class="form-control" rows="3" maxlength="2000" required></textarea>
+                <div class="d-flex justify-content-between align-items-center gap-2 mt-2">
+                    <small class="text-muted">До 2000 символов. Ctrl+Enter — отправить.</small>
+                    <button type="submit" class="btn btn-primary">Отправить</button>
+                </div>
+            </form>
+        <% } else { %><p class="alert alert-warning mt-3">Собеседник больше недоступен. История переписки сохранена.</p><% } %>
+    </div>
+</main>
+<script src="/js/chat.js" defer></script>
+</body>
+</html>

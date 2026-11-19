@@ -1,0 +1,27 @@
+<!DOCTYPE html><html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Пользователь — администрирование' }) %></head>
+<body>
+<%- include('../partials/toasts') %><%- include('../partials/header') %>
+<main class="container py-4 admin-page">
+    <h1 class="h3 mb-3">Управление пользователем</h1>
+    <%- include('nav', { section: 'users' }) %>
+    <section class="card p-3">
+        <h2 class="h4"><%= profile.name %></h2>
+        <p><%= profile.email %></p>
+        <p>Роль: <%= profile.role %> · Статус: <%= profile.status %></p>
+        <p>Дата регистрации: <%= new Date(profile.created_at).toLocaleDateString('ru-RU') %></p>
+        <p>Объявлений: <%= profile.listings_count %></p>
+        <% if (profile.block_reason) { %><p class="alert alert-warning">Причина блокировки: <%= profile.block_reason %></p><% } %>
+        <% if (Number(profile.id) !== Number(admin.id)) { %>
+            <form action="/admin/users/<%= profile.id %>" method="POST" class="admin-action">
+                <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                <input type="hidden" name="request_key" value="<%= requestKey %>">
+                <input type="hidden" name="status" value="<%= profile.status === 'active' ? 'blocked' : 'active' %>">
+                <label for="userReason" class="form-label">Причина изменения статуса</label>
+                <textarea name="reason" id="userReason" class="form-control mb-2" rows="2" maxlength="500" required></textarea>
+                <p class="form-text">При блокировке активные объявления снимаются с публикации. Разблокировка аккаунта не публикует их автоматически.</p>
+                <button type="submit" class="btn <%= profile.status === 'active' ? 'btn-outline-danger' : 'btn-primary' %>"><%= profile.status === 'active' ? 'Заблокировать' : 'Разблокировать' %></button>
+            </form>
+        <% } else { %><p class="text-muted">Собственную учётную запись здесь заблокировать нельзя.</p><% } %>
+    </section>
+</main></body></html>

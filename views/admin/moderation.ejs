@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Очередь модерации' }) %></head>
+<body class="bg-light">
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<main class="container py-4 review-page">
+    <%- include('nav', { section: 'moderation' }) %>
+    <h1 class="h3">Очередь модерации</h1>
+    <form action="/admin/moderation" method="get" class="row g-2 mb-4">
+        <div class="col-sm"><label class="form-label" for="moderation-country">Страна</label>
+            <select class="form-select" name="country" id="moderation-country"><option value="">Все страны</option>
+                <% for (const item of countries) { %><option value="<%= item.id %>" <%= country === Number(item.id) ? 'selected' : '' %>><%= item.name %></option><% } %>
+            </select>
+        </div>
+        <div class="col-sm"><label class="form-label" for="moderation-category">Категория</label>
+            <select class="form-select" name="category" id="moderation-category"><option value="">Все категории</option>
+                <% for (const item of categories) { %><option value="<%= item.id %>" <%= category === Number(item.id) ? 'selected' : '' %>><%= item.name %></option><% } %>
+            </select>
+        </div>
+        <div class="col-sm-auto align-self-end"><button class="btn btn-outline-primary">Применить</button></div>
+    </form>
+    <% if (!items.length) { %><p>По этим фильтрам нет объявлений на проверке.</p><% } %>
+    <% for (const item of items) { %>
+        <article class="card card-body mb-3" data-moderation-listing="<%= item.id %>">
+            <div class="row g-3">
+                <% if (item.image) { %><div class="col-sm-4 col-lg-3"><img class="img-fluid rounded" src="<%= item.image %>" alt="Фото объявления" loading="lazy"></div><% } %>
+                <div class="col">
+                    <h2 class="h5"><%= item.title %></h2>
+                    <p class="fw-semibold mb-1"><%= item.price %> <%= item.currency %></p>
+                    <p class="text-muted mb-1"><%= item.country %> · <%= item.category %> · <%= item.seller %></p>
+                    <p class="text-muted small mb-2">Подано <%= item.review_submitted_at ? new Date(item.review_submitted_at).toLocaleString('ru-RU') : '—' %></p>
+                    <p class="review-comment"><%= Array.from(item.description).slice(0, 600).join('') %><%= item.description.length > 600 ? '…' : '' %></p>
+                    <a href="/listings/<%= item.id %>">Открыть полное объявление</a>
+                    <%- include('../partials/listing-review-actions', { item, key: requestKey() }) %>
+                </div>
+            </div>
+        </article>
+    <% } %>
+    <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => '/admin/moderation?' + new URLSearchParams({ country: country || '', category: category || '', page: value }) }) %>
+</main>
+</body>
+</html>

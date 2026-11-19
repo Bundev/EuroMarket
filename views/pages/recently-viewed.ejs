@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <%- include('../partials/head', { pageTitle: 'Недавно просмотренные' }) %>
+    <script src="/js/listing-view.js"></script>
+</head>
+<body>
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<div class="container py-4 account-layout">
+    <%- include('../partials/account-nav', { activeAccountPage: '/recently-viewed' }) %>
+    <main class="account-content">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+            <h1 class="h3 mb-0">Недавно просмотренные</h1>
+            <% if (listings.length) { %><%- include('../partials/listing-view-toggle') %><% } %>
+        </div>
+        <% if (hasEntries) { %>
+            <details class="mb-3">
+                <summary class="text-danger">Очистить историю</summary>
+                <form action="/recently-viewed/clear" method="post" class="card card-body mt-2">
+                    <p>Удалить все просмотры?</p>
+                    <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                    <div><button type="submit" class="btn btn-danger">Да, очистить историю</button></div>
+                </form>
+            </details>
+        <% } %>
+        <% if (listings.length) { %>
+            <div class="search-results-list">
+                <% for (const listing of listings) { %>
+                    <%- include('../partials/search-listing-card', { listing, historyPage: page }) %>
+                <% } %>
+            </div>
+            <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => value === 1 ? '/recently-viewed' : '/recently-viewed?page=' + value }) %>
+        <% } else { %>
+            <p><%= hasEntries ? 'В истории нет доступных объявлений.' : 'История просмотров пока пуста.' %></p>
+            <a class="btn btn-primary" href="/search">К поиску объявлений</a>
+        <% } %>
+    </main>
+</div>
+</body>
+</html>

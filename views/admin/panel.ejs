@@ -1,0 +1,99 @@
+<!DOCTYPE html><html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Администрирование' }) %></head>
+<body>
+<%- include('../partials/toasts') %><%- include('../partials/header') %>
+<main class="container py-4 admin-page">
+    <h1 class="h3 mb-3">Администрирование EuroMarket</h1>
+    <%- include('nav') %>
+    <% if (section === 'dashboard') { %>
+        <div class="row g-3">
+            <% for (const [name,label] of [['users','Пользователи'],['listings','Объявления'],['active','Активные объявления'],['reports','Открытые жалобы']]) { %>
+                <div class="col-6 col-lg-3"><div class="card p-3 h-100"><span><%= label %></span><strong class="fs-2"><%= data.stats[name] %></strong></div></div>
+            <% } %>
+        </div>
+    <% } else { %>
+        <% if (section === 'users') { %>
+            <form method="GET" action="/admin/users" class="d-flex gap-2 mb-3">
+                <label for="adminSearch" class="visually-hidden">Имя или email</label>
+                <input id="adminSearch" type="search" name="search" value="<%= data.search %>" maxlength="100" placeholder="Имя или email" class="form-control">
+                <button class="btn btn-primary">Найти</button>
+            </form>
+        <% } %>
+        <% if (section === 'listings') { %>
+            <form method="GET" action="/admin/listings" class="row g-2 mb-3">
+                <div class="col-12 col-md-4"><label for="adminTitle" class="form-label">Название</label><input id="adminTitle" name="search" class="form-control" maxlength="100" value="<%= data.filters.search %>"></div>
+                <div class="col-12 col-md-2"><label for="adminStatus" class="form-label">Статус</label><select id="adminStatus" name="status" class="form-select">
+                    <option value="">Все</option><% ['draft','active','sold','archived','pending_review','rejected'].forEach(status => { %><option <%= data.filters.status === status ? 'selected' : '' %>><%= status %></option><% }) %>
+                </select></div>
+                <div class="col-12 col-md-3"><label for="adminCountry" class="form-label">Страна</label><select id="adminCountry" name="country" class="form-select">
+                    <option value="">Все</option><% countries.forEach(country => { %><option value="<%= country.id %>" <%= Number(data.filters.country) === Number(country.id) ? 'selected' : '' %>><%= country.name %></option><% }) %>
+                </select></div>
+                <div class="col-12 col-md-3"><label for="adminCategory" class="form-label">Категория</label><select id="adminCategory" name="category" class="form-select">
+                    <option value="">Все</option><% data.categories.forEach(category => { %><option value="<%= category.id %>" <%= Number(data.filters.category) === Number(category.id) ? 'selected' : '' %>><%= category.name %></option><% }) %>
+                </select></div>
+                <div><button class="btn btn-primary">Применить</button></div>
+            </form>
+        <% } %>
+        <% if (section === 'reports') { %>
+            <form method="GET" action="/admin/reports" class="d-flex gap-2 mb-3">
+                <label for="reportStatus" class="visually-hidden">Статус жалобы</label>
+                <select name="status" id="reportStatus" class="form-select"><option value="">Все жалобы</option><% ['open','accepted','rejected'].forEach(status => { %><option <%= data.status === status ? 'selected' : '' %>><%= status %></option><% }) %></select>
+                <button class="btn btn-primary">Применить</button>
+            </form>
+        <% } %>
+        <p class="text-muted">Всего: <%= data.total %></p>
+        <% if (!data.items.length) { %><p>Записей не найдено.</p><% } %>
+        <div class="d-grid gap-3">
+        <% data.items.forEach(item => { %>
+            <article class="card p-3">
+                <% if (section === 'users') { %>
+                    <a href="/admin/users/<%= item.id %>" class="fw-semibold"><%= item.name %></a>
+                    <span><%= item.email %></span><small>Роль: <%= item.role %> · Статус: <%= item.status %></small>
+                <% } else if (section === 'listings') { %>
+                    <a href="/listings/<%= item.id %>" class="fw-semibold"><%= item.title %></a>
+                    <p class="mb-2">№ <%= item.id %> · Статус: <%= item.status %> · <a href="/admin/users/<%= item.user_id %>">Владелец</a></p>
+                    <% if (item.moderation_locked) { %><p class="text-danger">Ограничение: <%= item.moderation_reason %></p><% } %>
+                    <% if (item.moderation_locked || ['active','draft','pending_review','rejected'].includes(item.status)) { %>
+                        <form action="/admin/listings/<%= item.id %>" method="POST" class="admin-action">
+                            <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                            <input type="hidden" name="request_key" value="<%= requestKey() %>">
+                            <input type="hidden" name="mode" value="<%= item.moderation_locked ? 'unblock' : 'block' %>">
+                            <label class="form-label" for="listingReason<%= item.id %>">Причина решения</label>
+                            <textarea name="reason" id="listingReason<%= item.id %>" class="form-control mb-2" rows="2" maxlength="500" required></textarea>
+                            <button class="btn btn-outline-danger"><%= item.moderation_locked ? 'Снять ограничение публикации' : 'Снять с публикации и ограничить' %></button>
+                        </form>
+                    <% } %>
+                <% } else if (section === 'reports') { %>
+                    <strong>Жалоба № <%= item.id %> · <%= data.reasons[item.reason] %> · <%= item.status %></strong>
+                    <p><%= item.author_name || 'Пользователь недоступен' %> — <%= item.listing_title || 'Объявление недоступно' %></p>
+                    <p class="admin-comment"><%= item.comment %></p>
+                    <% if (item.listing_id) { %><a href="/admin/listings?search=<%= encodeURIComponent(item.listing_title || '') %>">Управление объявлением</a><% } %>
+                    <% if (item.status === 'open') { %>
+                        <form action="/admin/reports/<%= item.id %>" method="POST" class="admin-action mt-2">
+                            <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                            <input type="hidden" name="request_key" value="<%= requestKey() %>">
+                            <label for="decision<%= item.id %>" class="form-label">Решение по жалобе</label>
+                            <p class="form-text">Для снятия публикации откройте управление объявлением.</p>
+                            <select name="status" id="decision<%= item.id %>" class="form-select mb-2"><option value="accepted">Принять</option><option value="rejected">Отклонить</option></select>
+                            <label for="reportReason<%= item.id %>" class="form-label">Обоснование решения</label>
+                            <textarea name="reason" id="reportReason<%= item.id %>" class="form-control mb-2" rows="2" maxlength="500" required></textarea>
+                            <button class="btn btn-primary">Сохранить решение</button>
+                        </form>
+                    <% } else { %><p>Решение: <%= item.review_reason %></p><% } %>
+                <% } else { %>
+                    <strong><%= item.admin_name %> · <%= item.action %> · № <%= item.target_id %></strong>
+                    <time><%= new Date(item.created_at).toLocaleString('ru-RU') %></time>
+                    <p><%= item.reason %></p>
+                    <details><summary>Изменения</summary><pre class="admin-comment">До: <%= item.before_state %>
+После: <%= item.after_state %></pre></details>
+                <% } %>
+            </article>
+        <% }) %>
+        </div>
+        <nav class="d-flex justify-content-between mt-3" aria-label="Страницы административной панели">
+            <% if (data.page > 1) { %><a href="<%= pageUrl(data.page - 1) %>">Назад</a><% } %>
+            <span><%= data.page %> / <%= data.pages %></span>
+            <% if (data.page < data.pages) { %><a href="<%= pageUrl(data.page + 1) %>">Вперёд</a><% } %>
+        </nav>
+    <% } %>
+</main></body></html>

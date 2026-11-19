@@ -1,0 +1,16 @@
+<span class="seller-rating">
+    <span class="seller-rating-stars" aria-hidden="true">
+        <% for (let index = 0; index < 5; index++) {
+            const fill = Math.round(Math.min(1, Math.max(0, (rating.average ?? 0) - index)) * 100);
+        %>
+            <span class="seller-rating-star" style="--seller-star-fill: <%= fill %>%;">☆<span>★</span></span>
+        <% } %>
+    </span>
+    <span class="seller-rating-label">
+        <% if (rating.total) { %>
+            <%= rating.average.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) %> / 5 · отзывов: <%= rating.total %>
+        <% } else { %>
+            Нет оценок (0)
+        <% } %>
+    </span>
+</span>

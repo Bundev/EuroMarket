@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Жалобы на отзыв' }) %></head>
+<body class="bg-light">
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<main class="container py-4 review-page">
+    <%- include('nav', { section: 'reviews' }) %>
+    <h1 class="h3">Жалобы на отзыв</h1>
+    <% if (!reports.length) { %><p>Жалоб пока нет.</p><% } %>
+    <% for (const report of reports) { %>
+        <article class="card card-body mb-3">
+            <h2 class="h6"><%= report.author %></h2>
+            <p class="small text-muted"><%= new Date(report.created_at).toLocaleDateString('ru-RU') %> · <%= report.resolved_at ? 'Закрыта' : 'Открыта' %></p>
+            <p class="review-comment mb-0"><%= report.reason %></p>
+        </article>
+    <% } %>
+    <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => '/admin/reviews/' + dealId + '/reports?page=' + value }) %>
+</main>
+</body>
+</html>

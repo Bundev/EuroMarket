@@ -1,0 +1,12 @@
+<form method="post" action="/admin/moderation/<%= item.id %>" class="mt-3">
+    <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+    <input type="hidden" name="version" value="<%= item.review_version %>">
+    <input type="hidden" name="request_key" value="<%= key %>">
+    <label class="form-label" for="review-reason-<%= item.id %>">Причина отклонения</label>
+    <textarea class="form-control mb-2" id="review-reason-<%= item.id %>" name="reason" maxlength="450" rows="2"
+              placeholder="Обязательно при отклонении"></textarea>
+    <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-primary" name="mode" value="approve" <%= Number(item.moderation_locked) || item.seller_status !== 'active' ? 'disabled' : '' %>>Одобрить</button>
+        <button class="btn btn-outline-danger" name="mode" value="reject">Отклонить</button>
+    </div>
+</form>

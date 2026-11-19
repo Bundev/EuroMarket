@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Сделка №' + deal.id }) %></head>
+<body class="bg-light">
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<div class="container py-4 account-layout deal-account-layout">
+    <%- include('../partials/account-nav', { activeAccountPage: '/my-purchases' }) %>
+    <main class="account-content deal-detail">
+        <% if (side === 'admin') { %>
+            <a class="d-inline-block mb-3" href="/admin">← Панель администратора</a>
+        <% } else { %>
+            <a class="d-inline-block mb-3" href="<%= side === 'seller' ? '/my-purchases?side=seller' : '/my-purchases' %>">
+                ← <%= side === 'seller' ? 'К продажам' : 'К покупкам' %>
+            </a>
+        <% } %>
+        <h1 class="h3 mb-3">Сделка №<%= deal.id %></h1>
+        <div class="deal-detail-grid">
+            <section class="card card-body gap-3" aria-labelledby="deal-product">
+                <div class="deal-product-photo">
+                    <% if (product?.image) { %>
+                        <img src="<%= product.image %>" alt="Фото товара" decoding="async">
+                    <% } else { %>
+                        <span class="text-muted">Фото недоступно</span>
+                    <% } %>
+                </div>
+                <div>
+                    <h2 id="deal-product" class="h5"><%= product?.title || 'Объявление недоступно' %></h2>
+                    <% if (product) { %><a href="/listings/<%= deal.listing_id %>">Открыть объявление</a><% } %>
+                </div>
+                <dl class="row gy-2 mb-0">
+                    <dt class="col-sm-5">Цена сделки</dt>
+                    <dd class="col-sm-7 mb-0 fw-semibold"><%= deal.price %> <%= deal.currency %></dd>
+                    <dt class="col-sm-5">Продавец</dt>
+                    <dd class="col-sm-7 mb-0"><%= deal.seller_name %></dd>
+                    <dt class="col-sm-5">Покупатель</dt>
+                    <dd class="col-sm-7 mb-0"><%= deal.buyer_name %></dd>
+                </dl>
+                <% if (deal.conversation_id) { %>
+                    <div><a class="btn btn-outline-primary" href="/messages/<%= deal.conversation_id %>">Открыть переписку</a></div>
+                <% } %>
+            </section>
+            <section class="card card-body" aria-labelledby="deal-progress" data-deal-status="<%= deal.status %>">
+                <h2 id="deal-progress" class="h5">Статус и история</h2>
+                <p><span class="badge text-wrap text-start <%= deal.status === 'completed' ? 'text-bg-success' : 'text-bg-secondary' %>"><%= statusLabel %></span></p>
+                <% if (!available && ['requested', 'accepted'].includes(deal.status)) { %>
+                    <p class="text-danger">Сделка приостановлена из-за ограничения объявления или аккаунта.</p>
+                <% } %>
+                <% if (side !== 'admin' && deal.status === 'accepted' && actions.some(([action]) => action === 'confirm')) { %>
+                    <p class="small text-muted">Подтверждайте сделку после передачи товара.</p>
+                <% } %>
+                <%- include('../partials/deal-actions', { deal, actions }) %>
+                <div class="border-top mt-3 pt-3">
+                    <% if (dispute) { %>
+                        <p class="mb-2">Спор <a href="/disputes/<%= dispute.id %>">№<%= dispute.id %></a> · <%= disputeStatuses[dispute.status] %></p>
+                        <% if (activeDispute) { %><p class="text-muted mb-2">Подтверждение и отмена сделки доступны после закрытия спора.</p><% } %>
+                    <% } %>
+                    <% if (disputeKey) { %>
+                        <details>
+                            <summary class="text-primary"><%= dispute ? 'Открыть новый спор' : 'Открыть спор' %></summary>
+                            <form class="mt-3" action="/deals/<%= deal.id %>/disputes" method="post" enctype="multipart/form-data" data-dispute-upload>
+                                <input type="hidden" name="request_key" value="<%= disputeKey %>">
+                                <label class="form-label" for="dispute-reason">Причина</label>
+                                <select id="dispute-reason" name="reason" class="form-select mb-3" required>
+                                    <option value="">Выберите причину</option>
+                                    <% for (const [value, label] of Object.entries(reasons)) { %><option value="<%= value %>"><%= label %></option><% } %>
+                                </select>
+                                <label class="form-label" for="dispute-body">Опишите проблему</label>
+                                <textarea id="dispute-body" name="body" class="form-control mb-3" rows="4" maxlength="2000" required></textarea>
+                                <label class="form-label" for="dispute-photos">Фотографии</label>
+                                <input id="dispute-photos" name="photos" class="form-control" type="file" multiple
+                                       accept="image/jpeg,image/png,image/webp" aria-describedby="dispute-photo-help">
+                                <p id="dispute-photo-help" class="form-text">До 5 файлов JPEG, PNG или WebP, по 2 МБ каждый.</p>
+                                <button class="btn btn-primary" type="submit">Отправить обращение</button>
+                                <noscript><p class="form-text">Для отправки обращения включите JavaScript.</p></noscript>
+                            </form>
+                        </details>
+                    <% } %>
+                </div>
+                <ol class="deal-timeline border-top list-unstyled mt-3 mb-0 pt-3">
+                    <% for (const [key, label, date] of events) { %>
+                        <li data-deal-event="<%= key %>">
+                            <strong><%= label %></strong>
+                            <time class="d-block small text-muted" datetime="<%= date.toISOString() %>"><%= date.toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }) %></time>
+                        </li>
+                    <% } %>
+                </ol>
+            </section>
+        </div>
+    </main>
+</div>
+<% if (disputeKey) { %><script src="/js/dispute-upload.js" defer></script><% } %>
+</body>
+</html>

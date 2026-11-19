@@ -1,0 +1,1473 @@
+html {
+    --site-header-height: 80px;
+    scroll-padding-top: calc(var(--site-header-height, 80px) + 12px);
+}
+
+body {
+    background: #f5f7fa;
+    font-family: Arial, sans-serif;
+}
+
+.site-header {
+    background: #fff;
+    border-bottom: 1px solid #e5eaf1;
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    box-shadow: 0 2px 10px #0f172a08;
+}
+
+.header-row {
+    display: grid;
+    grid-template-columns: auto 130px minmax(160px, 1fr) 44px 44px 44px auto auto;
+    grid-template-areas: "brand country search favorites messages notifications account publish";
+    align-items: center;
+    column-gap: 12px;
+    min-height: 80px;
+}
+
+.header-brand {
+    grid-area: brand;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    color: #2563eb;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.header-panel {
+    display: contents;
+}
+
+.header-search {
+    grid-area: search;
+    display: flex;
+    gap: 0;
+    min-width: 0;
+    width: 100%;
+    max-width: 440px;
+    justify-self: start;
+    margin: 0;
+}
+
+.header-search .form-control {
+    min-width: 0;
+    min-height: 44px;
+    border-radius: 10px 0 0 10px;
+    font-size: 14px;
+}
+
+.header-search .btn {
+    flex: 0 0 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 0 10px 10px 0;
+}
+
+.header-country {
+    grid-area: country;
+    margin: 0;
+    min-width: 0;
+}
+
+.header-country-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.header-country-select {
+    width: 100%;
+    min-height: 44px;
+    border-color: #e2e8f0;
+    border-radius: 10px;
+    font-size: 14px;
+    cursor: pointer;
+    text-overflow: ellipsis;
+}
+
+.header-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 10px;
+    color: #334155;
+    background: transparent;
+    text-decoration: none;
+}
+
+.header-icon:hover,
+.header-user:hover {
+    background: #f1f5f9;
+    color: #2563eb;
+}
+
+.header-favorites {
+    grid-area: favorites;
+}
+
+.header-messages {
+    grid-area: messages;
+    position: relative;
+}
+
+.header-messages-label {
+    display: none;
+}
+
+.header-notifications {
+    grid-area: notifications;
+    position: relative;
+}
+
+.header-notifications summary {
+    list-style: none;
+    position: relative;
+    cursor: pointer;
+}
+
+.header-notifications summary::-webkit-details-marker {
+    display: none;
+}
+
+.notification-dropdown {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    width: min(360px, calc(100vw - 24px));
+    max-height: calc(100dvh - var(--site-header-height) - 18px);
+    overflow-y: auto;
+    padding: 12px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 12px 32px #0f172a14;
+}
+
+.notification-item {
+    padding: 12px;
+    overflow-wrap: anywhere;
+}
+
+.notification-unread {
+    background: #eff6ff;
+    border-left: 3px solid #2563eb;
+}
+
+.notification-item a {
+    display: block;
+    min-height: 44px;
+}
+
+.notification-item button,
+.notification-dropdown > button {
+    min-height: 44px;
+}
+
+.message-badge {
+    position: absolute;
+    top: 0;
+    right: -3px;
+    min-width: 18px;
+    padding: 1px 4px;
+    border-radius: 10px;
+    font-size: 10px;
+    background: #dc2626;
+    color: #fff;
+}
+
+.header-toggle {
+    display: none;
+}
+
+.header-account {
+    grid-area: account;
+    position: relative;
+    min-width: 0;
+}
+
+.header-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    list-style: none;
+    color: #334155;
+}
+
+.header-user::-webkit-details-marker {
+    display: none;
+}
+
+.header-user svg {
+    flex-shrink: 0;
+}
+
+.header-user-name {
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.header-user-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 12px);
+    width: 230px;
+    padding: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 12px 32px #0f172a14;
+    max-height: calc(100vh - var(--site-header-height, 80px) - 12px);
+    max-height: calc(100dvh - var(--site-header-height, 80px) - 12px);
+    overflow-y: auto;
+}
+
+.header-user-menu a,
+.header-user-menu button,
+.header-guest a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 8px;
+    color: #334155;
+    background: transparent;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.header-user-menu form {
+    margin: 4px 0 0;
+    border-top: 1px solid #eef2f6;
+}
+
+.header-user-menu .header-logout {
+    width: 100%;
+    color: #dc2626;
+    text-align: left;
+}
+
+.header-user-menu a:hover,
+.header-user-menu button:hover,
+.header-guest a:hover {
+    background: #f1f5f9;
+}
+
+.header-guest {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.header-publish {
+    grid-area: publish;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.site-header a:focus-visible,
+.site-header button:focus-visible,
+.header-user:focus-visible {
+    outline: 3px solid #93c5fd;
+    outline-offset: 3px;
+}
+
+@media (max-width: 1199.98px) and (min-width: 992px) {
+    html {
+        --site-header-height: 118px;
+    }
+    .header-row {
+        grid-template-columns: auto 170px minmax(0, 1fr) 44px 44px 44px auto auto;
+        grid-template-areas: "brand country . favorites messages notifications account publish"
+                             "search search search search search search search search";
+        column-gap: 12px;
+        row-gap: 8px;
+        padding-top: 10px;
+        padding-bottom: 12px;
+    }
+    .header-user-name {
+        max-width: 110px;
+    }
+}
+
+@media (min-width: 1200px) and (max-width: 1399.98px) {
+    .header-user-name {
+        max-width: 110px;
+    }
+}
+
+@media (max-width: 991.98px) {
+    html {
+        --site-header-height: 116px;
+    }
+    .header-row {
+        grid-template-columns: minmax(0, 1fr) 44px 44px 44px;
+        grid-template-areas: "brand favorites notifications toggle"
+                             "search search search search";
+        column-gap: 8px;
+        row-gap: 8px;
+        min-height: 68px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+    .header-brand {
+        font-size: 23px;
+    }
+    .header-search {
+        max-width: none;
+    }
+    .header-toggle {
+        grid-area: toggle;
+        display: inline-flex;
+    }
+    .header-panel[hidden] {
+        display: none;
+    }
+    .header-panel:not([hidden]) {
+        display: grid;
+        position: absolute;
+        top: 100%;
+        left: 12px;
+        right: 12px;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "country" "messages" "account" "publish";
+        align-content: start;
+        gap: 8px;
+        padding: 12px;
+        margin: 0;
+        max-height: calc(100vh - var(--site-header-height, 116px) - 12px);
+        max-height: calc(100dvh - var(--site-header-height, 116px) - 12px);
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+        border: 1px solid #e2e8f0;
+        border-radius: 0 0 12px 12px;
+        background: #fff;
+        box-shadow: 0 12px 24px #0f172a14;
+    }
+    .header-country-label {
+        position: static;
+        display: block;
+        width: auto;
+        height: auto;
+        clip-path: none;
+        margin-bottom: 4px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #64748b;
+    }
+    .header-country-select {
+        max-width: 100%;
+    }
+    .header-user {
+        display: none;
+    }
+    .header-messages {
+        width: 100%;
+        justify-content: flex-start;
+        gap: 10px;
+    }
+    .header-messages-label {
+        display: inline;
+    }
+    .notification-dropdown {
+        position: fixed;
+        top: calc(var(--site-header-height) + 6px);
+        left: 12px;
+        right: 12px;
+        width: auto;
+    }
+    .header-user-name {
+        max-width: 210px;
+    }
+    .header-user-menu {
+        position: static;
+        width: 100%;
+        box-shadow: none;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        max-height: none;
+        overflow: visible;
+    }
+    .header-guest {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .header-guest a {
+        flex: 1;
+        justify-content: center;
+        border: 1px solid #e2e8f0;
+    }
+}
+
+@media (max-width: 359.98px) {
+    .header-brand {
+        font-size: 21px;
+    }
+    .header-user-name {
+        max-width: 180px;
+    }
+}
+
+.hero {
+    background: #eaf1ff;
+    padding: 65px 20px;
+    text-align: center;
+}
+
+.category-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 25px 10px;
+    text-align: center;
+    height: 100%;
+    transition: .2s;
+}
+
+.category-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 5px 20px #00000012;
+}
+
+.category-icon {
+    font-size: 35px;
+}
+
+
+/* Объявления пользователя */
+
+.card-title {
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.card .text-primary {
+    color: var(--primary) !important;
+}
+
+.badge {
+    font-size: 12px;
+    padding: 7px 10px;
+    border-radius: 6px;
+}
+
+.card-body .card-title {
+    overflow-wrap: anywhere;
+}
+
+/* Страница объявления */
+
+.listing-description {
+    white-space: pre-line;
+    line-height: 1.8;
+    overflow-wrap: anywhere;
+    color: var(--text);
+}
+
+.listing-price {
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.listing-price-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.listing-price-row .listing-price {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.listing-price-row > .search-listing-favorite.listing-detail-favorite {
+    position: static;
+    flex: 0 0 44px;
+    display: grid;
+    place-items: center;
+}
+
+.seller-rating-row,
+.seller-rating {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 8px;
+}
+
+.seller-rating-stars {
+    display: inline-flex;
+    gap: 2px;
+    color: #64748b;
+    font-size: 17px;
+    line-height: 1.25;
+}
+
+.seller-rating-star {
+    position: relative;
+}
+
+.seller-rating-star > span {
+    position: absolute;
+    inset: 0;
+    color: #a65800;
+    clip-path: inset(0 calc(100% - var(--seller-star-fill)) 0 0);
+}
+
+.seller-rating-label,
+.seller-rating-row > a {
+    white-space: nowrap;
+}
+
+.seller-avatar {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    border-radius: 50%;
+    background: #dbeafe;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.seller-phone-button {
+    min-height: 44px;
+}
+
+.seller-phone-result,
+.seller-avatar + div {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+
+/* Галерея фотографий объявления */
+
+.listing-gallery-main {
+    height: 420px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #f3f4f6;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.listing-gallery-main img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.listing-thumbnails {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 4px 2px;
+}
+
+.listing-thumbnail {
+    width: 85px;
+    height: 85px;
+    flex-shrink: 0;
+    padding: 3px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background: #f3f4f6;
+    cursor: pointer;
+}
+
+.listing-thumbnail.active {
+    border-color: var(--primary);
+}
+
+.listing-thumbnail:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.listing-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+@media (max-width: 768px) {
+    .listing-gallery-main {
+        height: 280px;
+    }
+
+    .listing-thumbnail {
+        width: 65px;
+        height: 65px;
+    }
+}
+
+/* Фотографии карточек объявлений */
+
+.listing-card-image {
+    display: block;
+    height: 210px;
+    overflow: hidden;
+    background: #f3f4f6;
+    border-radius: 12px 12px 0 0;
+}
+
+.listing-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.25s ease;
+}
+
+.listing-card-image:hover img {
+    transform: scale(1.04);
+}
+
+.listing-no-image {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #9ca3af;
+    font-size: 14px;
+}
+
+@media (max-width: 768px) {
+    .listing-card-image {
+        height: 180px;
+    }
+}
+
+
+/* Карточка фотографии */
+
+.listing-edit-image {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: #f3f4f6;
+}
+
+.listing-edit-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Кнопка удаления */
+
+.listing-image-delete-form {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    margin: 0;
+}
+
+.listing-image-delete {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(220, 38, 38, 0.95);
+    color: white;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    cursor: pointer;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+    transition: background 0.2s, transform 0.2s;
+}
+
+.listing-image-delete:hover {
+    background: #b91c1c;
+    transform: scale(1.1);
+}
+
+.listing-image-delete:active {
+    transform: scale(0.95);
+}
+
+.listing-image-delete:focus-visible {
+    outline: 3px solid #2563eb;
+    outline-offset: 2px;
+}
+
+
+/* Красивая загрузка фотографий */
+
+.listing-upload-form {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+}
+
+.listing-upload-zone {
+    border: 2px dashed #b6c8e5;
+    background: #f8faff;
+    border-radius: 14px;
+    padding: 35px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.listing-upload-zone:hover,
+.listing-upload-zone.dragover {
+    border-color: var(--primary);
+    background: #eff6ff;
+}
+
+.listing-upload-zone:focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 3px;
+}
+
+.listing-upload-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto;
+    border-radius: 50%;
+    background: #dbeafe;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.listing-upload-hint {
+    display: inline-block;
+    background: #e8f0ff;
+    color: #2563eb;
+    padding: 7px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.listing-upload-button {
+    padding: 12px;
+    font-size: 15px;
+    border-radius: 10px;
+}
+
+.listing-new-preview {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+    .listing-upload-form {
+        padding: 16px;
+    }
+
+    .listing-upload-zone {
+        padding: 28px 12px;
+    }
+}
+
+.listing-unpublish-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-weight: 600;
+    border: 1px solid #f59e0b;
+    color: #b45309;
+    transition: 0.2s ease;
+}
+
+.listing-unpublish-btn:hover {
+    background: #f59e0b;
+    border-color: #f59e0b;
+    color: white;
+    transform: translateY(-2px);
+}
+
+/* Кнопка "Продано" */
+
+.listing-sold-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-weight: 600;
+    border: 1px solid #16a34a;
+    color: #15803d;
+    transition: 0.2s ease;
+}
+
+.listing-sold-btn:hover {
+    background: #16a34a;
+    border-color: #16a34a;
+    color: white;
+    transform: translateY(-2px);
+}
+
+/* Карточки объявлений на главной */
+
+.marketplace-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    overflow: hidden;
+    transition: transform .2s, box-shadow .2s;
+}
+
+.marketplace-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, .1);
+}
+
+.marketplace-card-image {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    background: #f3f4f6;
+}
+
+.marketplace-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.marketplace-no-image {
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #9ca3af;
+}
+
+.marketplace-card-title {
+    font-weight: 600;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.marketplace-price {
+    font-size: 20px;
+    font-weight: 700;
+    color: #2563eb;
+    margin: 10px 0;
+}
+
+@media (max-width: 359.98px) {
+    .recent-listings-grid > .col {
+        width: 100%;
+    }
+}
+
+@media (max-width: 576px) {
+    .marketplace-price {
+        font-size: 17px;
+    }
+}
+
+/* Горизонтальные карточки поиска */
+
+.search-results-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.search-listing-card {
+    display: flex;
+    gap: 16px;
+    padding: 12px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    min-height: 180px;
+    transition: box-shadow .2s, transform .2s;
+}
+
+.search-listing-card:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .08);
+    transform: translateY(-2px);
+}
+
+/* Фотография */
+
+.search-listing-image {
+    width: 245px;
+    height: 165px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f3f4f6;
+}
+
+.search-listing-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform .3s;
+}
+
+.search-listing-card:hover img {
+    transform: scale(1.04);
+}
+
+.search-listing-no-image {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #9ca3af;
+}
+
+/* Содержимое */
+
+.search-listing-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.search-listing-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+}
+
+.search-listing-title {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: #12363b;
+    text-decoration: none;
+    font-size: 20px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.search-listing-title:hover {
+    color: #2563eb;
+}
+
+.search-listing-price {
+    color: #12363b;
+    font-size: 21px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+/* Нижняя строка */
+
+.search-listing-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.search-listing-meta {
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    color: #64748b;
+    font-size: 13px;
+}
+
+.search-listing-favorite {
+    min-width: 44px;
+    min-height: 44px;
+    border: none;
+    background: transparent;
+    color: #12363b;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    transition: .2s;
+}
+
+.favorite-button[aria-pressed="true"] {
+    color: #ef4444;
+}
+
+.favorite-button[aria-pressed="true"] svg {
+    fill: currentColor;
+}
+
+.favorite-home {
+    position: absolute;
+    top: 12px;
+    right: 24px;
+    background: #ffffff;
+}
+
+.search-listing-favorite:hover:not(:disabled) {
+    color: #ef4444;
+    background: #fef2f2;
+}
+
+.search-listing-favorite:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+/* Адаптация для телефонов */
+
+@media (max-width: 768px) {
+    .search-listing-card {
+        gap: 12px;
+        min-height: 120px;
+        padding: 10px;
+    }
+
+    .search-listing-image {
+        width: 125px;
+        height: 115px;
+    }
+
+    .search-listing-title {
+        font-size: 14px;
+        line-height: 1.3;
+    }
+
+    .search-listing-price {
+        font-size: 16px;
+    }
+
+    .search-listing-top {
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .search-listing-meta {
+        font-size: 11px;
+    }
+
+    .search-listing-favorite svg {
+        width: 20px;
+        height: 20px;
+    }
+}
+
+.search-listing-location {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.search-listing-location svg {
+    flex-shrink: 0;
+    color: #64748b;
+}
+
+/* Поиск города */
+
+.ts-wrapper.single .ts-control {
+    min-height: 46px;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 15px;
+    box-shadow: none;
+}
+
+.ts-wrapper.focus .ts-control {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.ts-dropdown {
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.ts-dropdown .option {
+    padding: 11px 14px;
+}
+
+.ts-dropdown .active {
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+
+/* Панель поиска EuroMarket */
+
+.search-pagination {
+    flex-wrap: wrap;
+    row-gap: 8px;
+}
+
+.search-filter-form {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.search-filter-form .form-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 8px;
+}
+
+.search-filter-form .form-control,
+.search-filter-form .form-select {
+    height: 48px;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    padding: 10px 14px;
+    font-size: 15px;
+}
+
+.search-filter-form .form-control:focus,
+.search-filter-form .form-select:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+}
+
+.search-filter-submit {
+    width: 100%;
+    height: 48px;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 15px;
+    background: #2563eb;
+    transition: background .2s, transform .2s;
+}
+
+.search-filter-submit:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+}
+
+/* Одна разметка карточек для плитки и списка. */
+.listing-view-toggle .btn {
+    min-width: 44px;
+    min-height: 44px;
+}
+
+html[data-listing-view="grid"] .search-results-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+}
+
+html[data-listing-view="grid"] .search-listing-card {
+    position: relative;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+html[data-listing-view="grid"] .search-listing-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    border-radius: 0;
+}
+
+html[data-listing-view="grid"] .search-listing-content {
+    padding: 12px;
+    gap: 12px;
+}
+
+html[data-listing-view="grid"] .search-listing-top {
+    flex-direction: column;
+    gap: 8px;
+}
+
+html[data-listing-view="grid"] .search-listing-title {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 2.8em;
+    font-size: 16px;
+    line-height: 1.4;
+}
+
+html[data-listing-view="grid"] .search-listing-price {
+    font-size: 18px;
+}
+
+html[data-listing-view="grid"] .search-listing-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+}
+
+html[data-listing-view="grid"] .search-listing-dot {
+    display: none;
+}
+
+html[data-listing-view="grid"] .search-listing-location {
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+
+html[data-listing-view="grid"] .search-listing-favorite {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #fff;
+    z-index: 1;
+}
+
+@media (min-width: 360px) {
+    html[data-listing-view="grid"] .search-results-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 768px) {
+    html[data-listing-view="grid"] .search-results-list {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1200px) {
+    html[data-listing-view="grid"] .search-results-list {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .search-filter-form {
+        padding: 16px;
+    }
+}
+
+.chat-page {
+    max-width: 960px;
+}
+
+.chat-panel {
+    padding: 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+    min-width: 0;
+}
+
+.chat-history {
+    height: clamp(140px, 45dvh, 540px);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    padding: 12px;
+    border-radius: 8px;
+    background: #f1f5f9;
+}
+
+.chat-message {
+    width: fit-content;
+    max-width: 85%;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border-radius: 12px;
+    background: #fff;
+    overflow-wrap: anywhere;
+}
+
+.chat-message-mine {
+    margin-left: auto;
+    background: #dbeafe;
+}
+
+.chat-message p {
+    margin: 0 0 6px;
+    white-space: pre-wrap;
+}
+
+.chat-message small {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    color: #64748b;
+}
+
+.chat-panel button {
+    min-height: 44px;
+}
+
+.chat-compose > .d-flex {
+    flex-wrap: wrap;
+}
+
+.conversation-preview {
+    padding: 16px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.conversation-preview strong {
+    min-width: 0;
+}
+
+.admin-page {
+    overflow-wrap: anywhere;
+}
+
+.admin-page .card,
+.admin-page input,
+.admin-page select {
+    min-width: 0;
+}
+
+.admin-page .nav-link,
+.admin-page button,
+.admin-page select,
+.admin-page input {
+    min-height: 44px;
+}
+
+.admin-comment {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.conversation-preview .badge {
+    flex-shrink: 0;
+    align-self: flex-start;
+}
+
+@media (max-width: 575.98px) {
+    .chat-panel {
+        padding: 12px;
+    }
+    .chat-message {
+        max-width: 95%;
+    }
+}
+.em-toasts {
+    position: fixed; top: var(--toast-top, 12px); right: max(16px, env(safe-area-inset-right));
+    width: min(380px, calc(100vw - 32px)); max-height: calc(100dvh - var(--toast-top, 12px) - 16px);
+    z-index: 1015; display: flex; flex-direction: column; gap: 10px; overflow-y: auto;
+    pointer-events: none; padding: 2px;
+}
+.em-toast { --toast-accent: #2563eb; display: flex; align-items: flex-start; gap: 10px; padding: 12px 8px 12px 12px; flex: 0 0 auto;
+    color: #172033; background: #fff; border: 1px solid #dce3ed; border-left: 4px solid var(--toast-accent);
+    border-radius: 14px; box-shadow: 0 8px 26px #17203322; pointer-events: auto;
+    opacity: 0; transform: translateY(-8px); transition: opacity .18s ease, transform .18s ease; }
+.em-toast.is-visible { opacity: 1; transform: none; }
+.em-toast-success { --toast-accent: #15803d; }
+.em-toast-error { --toast-accent: #c92a3a; }
+.em-toast-warning { --toast-accent: #a55c00; }
+.em-toast-icon { display: grid; place-items: center; flex: 0 0 26px; height: 26px; border-radius: 50%; color: white; background: var(--toast-accent); font-weight: 800; }
+.em-toast-content { min-width: 0; flex: 1; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.em-toast-content strong { display: block; margin-bottom: 3px; font-size: 13px; color: var(--toast-accent); }
+.em-toast-content p { margin: 0; }
+.em-toast-content a { display: inline-block; min-height: 44px; padding-top: 10px; color: #174ec1; }
+.em-toast-close { flex: 0 0 44px; width: 44px; height: 44px; margin-top: -8px; border: 0; border-radius: 10px; background: transparent; color: #596477; font-size: 27px; cursor: pointer; }
+.em-toast-close:hover { background: #f1f4f8; }
+.em-toast-close:focus-visible { outline: 3px solid #2563eb; outline-offset: -3px; }
+.action-result-page { margin: 0; min-height: 100vh; background: #f4f6fa; font-family: system-ui, sans-serif; color: #172033; }
+.action-result { max-width: 560px; margin: 0 auto; padding: 150px 20px 40px; }
+.action-result-brand { font-size: 24px; font-weight: 800; color: #174ec1; text-decoration: none; }
+.action-result h1 { font-size: 26px; margin-top: 28px; }
+.action-result-back { display: inline-block; padding: 12px 20px; border-radius: 10px; background: #174ec1; color: #fff; text-decoration: none; }
+@media (max-width: 575.98px) {
+    .em-toasts { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); width: auto; gap: 8px; }
+    .em-toast { padding-left: 10px; gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .em-toast { transition: none; transform: none; } }
+.account-layout { display: grid; gap: 1.25rem; }
+.account-content { min-width: 0; overflow-wrap: anywhere; }
+.account-nav { display: flex; flex-wrap: wrap; gap: .25rem; padding: .5rem; background: white; border: 1px solid #dee2e6; border-radius: .75rem; align-self: start; }
+.account-nav .nav-link { padding: .65rem .75rem; border-radius: .5rem; }
+.account-nav .active { background: #e7f0ff; color: #17449a; font-weight: 600; }
+@media (min-width: 992px) {
+    .account-layout { grid-template-columns: 13rem minmax(0, 1fr); }
+    .account-nav { flex-direction: column; }
+}
+.review-page, .review-comment { overflow-wrap: anywhere; }
+.review-comment { white-space: pre-wrap; }
+
+.deal-detail-grid { display: grid; gap: 1rem; align-items: start; }
+.deal-detail-grid > section { min-width: 0; }
+.deal-product-photo {
+    display: grid;
+    place-items: center;
+    height: clamp(9rem, 25vw, 15rem);
+    overflow: hidden;
+    background: #f1f3f5;
+    border-radius: .5rem;
+}
+.deal-product-photo img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.deal-timeline li { border-left: 2px solid #dce5f1; padding: .25rem 0 .75rem .75rem; }
+.deal-timeline li:last-child { padding-bottom: .25rem; }
+.dispute-grid { display: grid; gap: 1rem; align-items: start; }
+.dispute-grid > section { min-width: 0; overflow-wrap: anywhere; }
+.dispute-message { white-space: pre-wrap; }
+.dispute-evidence { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.dispute-evidence img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #f1f3f5; }
+@media (max-width: 991.98px) {
+    .deal-account-layout > .account-nav { display: none; }
+}
+@media (min-width: 768px) {
+    .deal-detail-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .dispute-grid { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+}

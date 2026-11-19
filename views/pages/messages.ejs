@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Сообщения' }) %></head>
+<body>
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<main class="container py-4">
+    <h1 class="h3 mb-4">Сообщения</h1>
+    <% if (!conversations.length) { %>
+        <p class="text-muted">У вас пока нет диалогов. Откройте объявление и напишите продавцу.</p>
+        <a href="/search" class="btn btn-primary">Найти объявления</a>
+    <% } %>
+    <div class="list-group">
+        <% conversations.forEach(chat => { %>
+            <a href="/messages/<%= chat.id %>" class="list-group-item list-group-item-action conversation-preview">
+                <div class="d-flex justify-content-between gap-2">
+                    <strong><%= chat.other_name %></strong>
+                    <% if (chat.unread) { %><span class="badge bg-primary"><%= chat.unread %></span><% } %>
+                </div>
+                <div><%= chat.listing_title %></div>
+                <% if (chat.listing_status !== 'active') { %><small class="text-muted">Объявление недоступно, переписка сохранена.</small><% } %>
+                <p class="text-muted mb-0 text-truncate"><%= chat.last_body || 'Сообщений пока нет' %></p>
+                <% if (chat.last_created_at) { %><small class="text-muted"><%= new Date(chat.last_created_at).toLocaleString('ru-RU') %></small><% } %>
+            </a>
+        <% }) %>
+    </div>
+    <nav class="d-flex justify-content-between mt-3" aria-label="Страницы диалогов">
+        <% if (page > 1) { %><a href="/messages?page=<%= page - 1 %>">Назад</a><% } %>
+        <% if (page < pages) { %><a href="/messages?page=<%= page + 1 %>">Вперёд</a><% } %>
+    </nav>
+</main>
+</body>
+</html>

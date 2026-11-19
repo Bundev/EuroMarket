@@ -1,0 +1,11 @@
+<div class="em-toasts" data-toast-container aria-label="Результаты действий"></div>
+<template data-toast-seed>
+    <% (typeof toasts !== 'undefined' ? toasts : []).forEach(toast => { %>
+        <span data-toast-id="<%= toast.id %>" data-toast-type="<%= toast.type %>"><%= toast.message %></span>
+    <% }) %>
+</template>
+<noscript>
+    <% (typeof toasts !== 'undefined' ? toasts : []).forEach(toast => { %>
+        <p class="alert alert-info" role="status"><%= toast.message %></p>
+    <% }) %>
+</noscript>

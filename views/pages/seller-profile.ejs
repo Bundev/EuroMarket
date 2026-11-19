@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="<%= typeof contentLocale === 'undefined' ? 'ru' : contentLocale.language %>">
+<head>
+    <%- include('../partials/head', { pageTitle: 'Профиль продавца' }) %>
+    <script src="/js/listing-view.js"></script>
+    <script src="/js/follow.js" defer></script>
+</head>
+<body>
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<main class="container py-4">
+    <section class="card card-body mb-4" aria-labelledby="seller-name">
+        <div class="d-flex align-items-start gap-3">
+            <div class="seller-avatar" aria-hidden="true"><%= seller.name.charAt(0).toUpperCase() %></div>
+            <div class="text-break">
+                <h1 class="h3 mb-1" id="seller-name"><%= seller.name %></h1>
+                <p class="text-muted mb-2">На EuroMarket с <%= seller.created_at.toLocaleDateString('ru-RU') %></p>
+                <div class="seller-rating-row">
+                    <%- include('../partials/seller-rating', { rating }) %>
+                    <a href="<%= reviewsPath %>">Все отзывы</a>
+                </div>
+                <p class="text-muted small mt-2 mb-0">Подписчиков: <span data-follower-count aria-live="polite"><%= follow.total %></span></p>
+                <% if (!user || Number(user.id) !== Number(seller.id)) { %>
+                    <div class="mt-3">
+                        <% if (user) { %>
+                            <%- include('../partials/follow-button', { sellerId: seller.id, following: follow.following }) %>
+                        <% } else { %>
+                            <a href="/login" class="btn btn-outline-primary">Войти, чтобы подписаться</a>
+                        <% } %>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </section>
+
+    <section aria-labelledby="seller-listings">
+        <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between mb-3">
+            <h2 class="h5 mb-0" id="seller-listings">Активные объявления <span class="text-muted">(<%= total %>)</span></h2>
+            <% if (listings.length) { %><%- include('../partials/listing-view-toggle') %><% } %>
+        </div>
+        <% if (listings.length) { %>
+            <form action="<%= profilePath %>" method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3">
+                <div>
+                    <label class="form-label" for="seller-sort">Сортировка</label>
+                    <select name="sort" id="seller-sort" class="form-select">
+                        <% for (const [value, label] of Object.entries(sorts)) { %>
+                            <option value="<%= value %>" <%= value === sort ? 'selected' : '' %>><%= label %></option>
+                        <% } %>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-outline-primary">Применить</button>
+            </form>
+            <% if (sort !== 'newest') { %><p class="text-muted small">Цены сортируются внутри каждой валюты.</p><% } %>
+            <div class="search-results-list">
+                <% for (const listing of listings) { %>
+                    <%- include('../partials/search-listing-card', { listing }) %>
+                <% } %>
+            </div>
+            <%- include('../partials/account-pagination', { page, totalPages, linkTo }) %>
+        <% } else { %>
+            <p class="card card-body">У продавца пока нет активных объявлений.</p>
+        <% } %>
+    </section>
+</main>
+</body>
+</html>

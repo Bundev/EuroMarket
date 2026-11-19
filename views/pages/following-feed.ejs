@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <%- include('../partials/head', { pageTitle: 'Лента подписок' }) %>
+    <script src="/js/listing-view.js"></script>
+</head>
+<body>
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<div class="container py-4 account-layout">
+    <%- include('../partials/account-nav', { activeAccountPage: feedPath }) %>
+    <main class="account-content">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+            <h1 class="h3 mb-0">Лента подписок</h1>
+            <% if (listings.length) { %><%- include('../partials/listing-view-toggle') %><% } %>
+        </div>
+        <p class="text-muted"><%= selectedCountryInfo?.name || 'Все страны' %> · объявлений: <%= total %></p>
+
+        <% if (listings.length) { %>
+            <form action="<%= feedPath %>" method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3">
+                <div>
+                    <label class="form-label" for="feed-sort">Сортировка</label>
+                    <select class="form-select" name="sort" id="feed-sort">
+                        <% for (const [value, label] of Object.entries(sorts)) { %>
+                            <option value="<%= value %>" <%= value === sort ? 'selected' : '' %>><%= label %></option>
+                        <% } %>
+                    </select>
+                </div>
+                <button class="btn btn-outline-primary" type="submit">Применить</button>
+            </form>
+            <% if (sort !== 'newest') { %><p class="small text-muted">Цены сортируются внутри каждой валюты.</p><% } %>
+            <div class="search-results-list">
+                <% for (const listing of listings) { %>
+                    <%- include('../partials/search-listing-card', { listing, showSeller: true }) %>
+                <% } %>
+            </div>
+            <%- include('../partials/account-pagination', { page, totalPages, linkTo }) %>
+        <% } else if (!hasFollows) { %>
+            <p>Найдите интересных продавцов в каталоге и подпишитесь на них.</p>
+            <a class="btn btn-primary" href="/search">Найти продавцов</a>
+        <% } else { %>
+            <p><%= selectedCountryInfo
+                ? 'В выбранной стране пока нет активных объявлений от ваших подписок.'
+                : 'У продавцов, на которых вы подписаны, пока нет активных объявлений.' %></p>
+            <% if (selectedCountryInfo) { %>
+                <a class="btn btn-outline-primary" href="<%= feedPath + '?country=all' + (headerCountrySort ? '&sort=' + headerCountrySort : '') %>">Все страны</a>
+            <% } %>
+        <% } %>
+    </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,261 @@
+
+<!DOCTYPE html>
+<html lang="<%= typeof contentLocale === 'undefined' ? 'ru' : contentLocale.language %>">
+
+<head>
+    <%- include('../partials/head', {
+        pageTitle: listing.title
+    }) %>
+</head>
+
+<body>
+<%- include('../partials/toasts') %>
+
+<%- include('../partials/header') %>
+
+<main class="container py-4">
+    <nav aria-label="Хлебные крошки">
+        <ol class="breadcrumb flex-wrap">
+            <% for (const [index, item] of trail.entries()) { %>
+                <% if (index === trail.length - 1) { %>
+                    <li class="breadcrumb-item active" aria-current="page"><%= item.name %></li>
+                <% } else { %>
+                    <li class="breadcrumb-item"><a href="<%= item.path %>"><%= item.name %></a></li>
+                <% } %>
+            <% } %>
+        </ol>
+    </nav>
+
+    <!-- Навигация -->
+    <nav class="mb-4">
+        <a href="/" class="text-decoration-none">
+            Главная
+        </a>
+        <span class="text-muted mx-2">/</span>
+        <span class="text-muted">
+            <%= listing.category_name %>
+        </span>
+    </nav>
+
+    <div class="row g-4">
+
+
+
+        <!-- Информация об объявлении -->
+        <div class="col-lg-8">
+<!-- Галерея фотографий -->
+<% if (images && images.length > 0) { %>
+
+    <div class="card mb-4">
+        <div class="card-body">
+
+            <!-- Главное фото -->
+            <div class="listing-gallery-main mb-3">
+                <img
+                    id="mainListingImage"
+                    src="<%= images[0].image_path %>"
+                    alt="<%= listing.title %>"
+                    class="img-fluid"
+                >
+            </div>
+
+            <!-- Миниатюры -->
+            <div class="listing-thumbnails">
+
+                <% images.forEach((image, index) => { %>
+
+                    <button
+                        type="button"
+                        class="listing-thumbnail <%= index === 0 ? 'active' : '' %>"
+                        data-image="<%= image.image_path %>"
+                        aria-label="Показать фотографию <%= index + 1 %>"
+                        aria-pressed="<%= index === 0 ? 'true' : 'false' %>"
+                    >
+                        <img
+                            src="<%= image.image_path %>"
+                            alt="Фото <%= index + 1 %>"
+                            loading="lazy"
+                        >
+                    </button>
+
+                <% }) %>
+
+            </div>
+
+        </div>
+    </div>
+
+<% } %>
+            <div class="card mb-4">
+                <div class="card-body">
+
+                    <h1 class="h3 mb-3">
+                        <%= listing.title %>
+                    </h1>
+
+                    <div class="d-flex gap-3 flex-wrap text-muted mb-4">
+                        <span>
+                            <%= listing.category_name %>
+                        </span>
+
+                        <span>
+                            <%= listing.country_name %>
+                        </span>
+
+                        <span>
+                            <%= new Date(listing.created_at)
+                                .toLocaleDateString('ru-RU') %>
+                        </span>
+                    </div>
+
+                    <% if (listing.status !== 'active') { %>
+                        <div class="alert alert-warning">
+                            Объявление ещё не опубликовано.
+                            Статус: <%= ({draft:'Черновик', pending_review:'На модерации', rejected:'Отклонено', sold:'Продано', archived:'Архив'})[listing.status] || listing.status %>
+                        </div>
+                    <% } %>
+                    <% if (listing.status === 'rejected' && listing.review_reason) { %>
+                        <p class="alert alert-warning">Причина отклонения: <%= listing.review_reason %></p>
+                    <% } %>
+                    <% if (typeof reviewKey !== 'undefined' && reviewKey) { %>
+                        <%- include('../partials/listing-review-actions', { item: listing, key: reviewKey }) %>
+                    <% } %>
+                    <% if (listing.moderation_locked && user && Number(user.id) === Number(listing.user_id)) { %>
+                        <div class="alert alert-danger">Публикация ограничена модератором: <%= listing.moderation_reason %></div>
+                    <% } %>
+
+                    <hr>
+
+                    <h5>Описание</h5>
+
+                    <p class="listing-description">
+                        <%= listing.description %>
+                    </p>
+
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Цена и продавец -->
+        <div class="col-lg-4">
+
+            <div class="card mb-3">
+                <div class="card-body">
+
+                    <div class="listing-price-row mb-3">
+                        <div class="listing-price">
+                            <%= Number(listing.price).toLocaleString('ru-RU') %>
+                            <%= listing.currency %>
+                        </div>
+                        <% if (listing.status === 'active') { %>
+                            <%- include('../partials/favorite-button', { listing, extraClass: 'listing-detail-favorite' }) %>
+                        <% } %>
+                    </div>
+
+                    <hr>
+
+                    <h6 class="mb-3">Продавец</h6>
+                    <div class="d-flex align-items-center gap-3">
+
+                        <div class="seller-avatar">
+                            <%= listing.seller_name
+                                .charAt(0).toUpperCase() %>
+                        </div>
+
+                        <div>
+                            <div class="fw-semibold">
+                                <% if (listing.seller_status === 'active') { %>
+                                    <a href="/users/<%= listing.user_id %>"><%= listing.seller_name %></a>
+                                <% } else { %>
+                                    <%= listing.seller_name %>
+                                <% } %>
+                            </div>
+                            <div class="small text-muted">
+                                На EuroMarket с <%= new Date(listing.seller_created_at).toLocaleDateString('ru-RU') %>
+                            </div>
+                            <div class="small text-muted">Активных объявлений: <%= listing.seller_active_count %></div>
+                            <div class="seller-rating-row small mt-1">
+                                <%- include('../partials/seller-rating', { rating: sellerRating }) %>
+                                <% if (listing.seller_status === 'active') { %>
+                                    <a href="/users/<%= listing.user_id %>/reviews">Отзывы продавца</a>
+                                <% } %>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <% if (typeof sellerFollow !== 'undefined' && sellerFollow) { %>
+                        <div class="mt-3">
+                            <% if (user) { %>
+                                <%- include('../partials/follow-button', { sellerId: listing.user_id, following: sellerFollow.following, listingPage: true }) %>
+                            <% } else { %>
+                                <a href="/login" class="btn btn-outline-primary w-100">Войти, чтобы подписаться на продавца</a>
+                            <% } %>
+                        </div>
+                    <% } %>
+
+                    <% if (listing.status === 'active') { %>
+                        <% if (!user) { %>
+                            <a href="/login" class="btn btn-outline-primary w-100 mt-3">Войти и написать продавцу</a>
+                        <% } else if (Number(user.id) !== Number(listing.user_id)) { %>
+                            <form action="/listings/<%= listing.id %>/purchase" method="POST" class="mt-3">
+                                <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                                <% if (typeof purchaseRequestKey !== 'undefined' && purchaseRequestKey) { %>
+                                    <input type="hidden" name="purchase_request_key" value="<%= purchaseRequestKey %>">
+                                <% } %>
+                                <button type="submit" class="btn btn-primary w-100">Запросить покупку</button>
+                            </form>
+                            <form action="/messages/start" method="POST" class="mt-3">
+                                <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                                <input type="hidden" name="listing_id" value="<%= listing.id %>">
+                                <button type="submit" class="btn btn-outline-primary w-100">Написать продавцу</button>
+                            </form>
+                        <% } %>
+                        <button type="button" class="btn btn-primary w-100 mt-3 seller-phone-button"
+                                data-phone-listing="<%= listing.id %>">Показать телефон</button>
+                        <div class="mt-2 seller-phone-result" role="status" aria-live="polite"></div>
+                    <% } %>
+                </div>
+            </div>
+
+            <a href="<%= user && Number(user.id) === Number(listing.user_id) ? '/my-listings' : '/search' %>"
+               class="btn btn-outline-secondary w-100">
+                <%= user && Number(user.id) === Number(listing.user_id) ? 'Мои объявления' : 'К поиску' %>
+            </a>
+
+        </div>
+
+    </div>
+
+</main>
+<% if (listing.status === 'active' && (!user || Number(user.id) !== Number(listing.user_id))) { %>
+    <section class="container pb-4">
+        <details class="card p-3">
+            <summary>Пожаловаться на объявление</summary>
+            <% if (user) { %>
+                <form action="/listings/<%= listing.id %>/report" method="POST" class="mt-3">
+                    <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                    <label for="reportReason" class="form-label">Причина жалобы</label>
+                    <select id="reportReason" name="reason" class="form-select mb-3" required>
+                        <% Object.entries(reportReasons).forEach(([code, label]) => { %><option value="<%= code %>"><%= label %></option><% }) %>
+                    </select>
+                    <label for="reportComment" class="form-label">Комментарий</label>
+                    <textarea id="reportComment" name="comment" maxlength="1000" rows="3" class="form-control mb-3"></textarea>
+                    <button type="submit" class="btn btn-outline-danger">Отправить жалобу</button>
+                </form>
+            <% } else { %><a href="/login" class="mt-3">Войдите, чтобы отправить жалобу</a><% } %>
+        </details>
+    </section>
+<% } %>
+<%- include('../partials/recent-listings', { listings: typeof recentListings === 'undefined' ? [] : recentListings, listingPath: typeof listingPath === 'undefined' ? null : listingPath }) %>
+<script src="/js/seller-phone.js" defer></script>
+<% if (typeof recordView !== 'undefined' && recordView) { %>
+    <script src="/js/recently-viewed.js" data-listing-id="<%= listing.id %>" defer></script>
+<% } %>
+<% if (typeof sellerFollow !== 'undefined' && sellerFollow && user) { %><script src="/js/follow.js" defer></script><% } %>
+
+<script src="/js/listing-gallery.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,91 @@
+<article class="search-listing-card">
+
+    <a
+        href="<%= listingPath(listing) %>"
+        class="search-listing-image"
+    >
+        <% if (listing.main_image) { %>
+            <img
+                src="<%= listing.main_image %>"
+                alt="<%= listing.title %>"
+                loading="lazy"
+            >
+        <% } else { %>
+            <div class="search-listing-no-image">
+                Нет фото
+            </div>
+        <% } %>
+    </a>
+
+    <div class="search-listing-content">
+
+        <div class="search-listing-top">
+
+            <a
+                href="<%= listingPath(listing) %>"
+                class="search-listing-title"
+            >
+                <%= listing.title %>
+            </a>
+
+            <div class="search-listing-price">
+                <%= Number(listing.price)
+                    .toLocaleString('ru-RU') %>
+                <%= listing.currency %>
+            </div>
+
+        </div>
+
+        <div class="search-listing-bottom">
+
+        <div class="search-listing-meta">
+            <% if (typeof showSeller !== 'undefined' && showSeller) { %>
+                <a class="w-100 text-break" href="/users/<%= listing.seller_id %>"><%= listing.seller_name %></a>
+            <% } %>
+
+            <span class="search-listing-location">
+                <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                >
+                    <path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/>
+                    <circle cx="12" cy="10" r="2.5"/>
+                </svg>
+
+                <%= listing.city_name
+                    ? listing.city_name + ', '
+                    : '' %><%= listing.country_name %>
+            </span>
+
+            <span class="search-listing-dot">·</span>
+
+            <span>
+                <%= new Date(listing.created_at)
+                    .toLocaleDateString('ru-RU') %>
+            </span>
+
+        </div>
+
+
+            <%- include('../partials/favorite-button', { listing }) %>
+
+        </div>
+
+        <% if (typeof historyPage === 'number') { %>
+            <form action="/recently-viewed/<%= listing.id %>/remove" method="post" class="mt-2">
+                <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                <input type="hidden" name="page" value="<%= historyPage %>">
+                <button type="submit" class="btn btn-sm btn-outline-secondary" aria-label="Убрать из истории: <%= listing.title %>">Убрать из истории</button>
+            </form>
+        <% } %>
+
+    </div>
+
+</article>

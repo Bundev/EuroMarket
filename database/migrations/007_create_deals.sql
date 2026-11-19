@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS deals (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    listing_id INT UNSIGNED NOT NULL,
+    buyer_id INT UNSIGNED NOT NULL,
+    seller_id INT UNSIGNED NOT NULL,
+    price DECIMAL(12,2) NOT NULL,
+    currency CHAR(3) NOT NULL,
+    status ENUM('requested','accepted','declined','cancelled','completed') NOT NULL DEFAULT 'requested',
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    buyer_confirmed_at DATETIME(3) NULL,
+    seller_confirmed_at DATETIME(3) NULL,
+    completed_at DATETIME(3) NULL,
+    open_buyer_id INT UNSIGNED GENERATED ALWAYS AS (CASE WHEN status IN ('requested','accepted') THEN buyer_id END) PERSISTENT,
+    reserved_listing_id INT UNSIGNED GENERATED ALWAYS AS (CASE WHEN status IN ('accepted','completed') THEN listing_id END) PERSISTENT,
+    UNIQUE KEY uq_deal_open_buyer (listing_id, open_buyer_id),
+    UNIQUE KEY uq_deal_reserved_listing (reserved_listing_id),
+    KEY idx_deal_buyer (buyer_id, id),
+    KEY idx_deal_seller (seller_id, id),
+    CONSTRAINT fk_deal_listing FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_deal_buyer FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_deal_seller FOREIGN KEY (seller_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT chk_deal_parties CHECK (buyer_id <> seller_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
