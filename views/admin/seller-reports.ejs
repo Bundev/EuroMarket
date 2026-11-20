@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Жалобы на продавцов' }) %></head>
+<body class="bg-light">
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<main class="container py-4 admin-page">
+    <%- include('./nav', { section: 'reports' }) %>
+    <h1 class="h3">Жалобы на продавцов</h1>
+    <%- include('report-nav', { reportType: 'sellerReports' }) %>
+    <nav class="admin-tabs mb-3" aria-label="Статус жалобы">
+        <% for (const [value, label] of Object.entries({ open: 'Открытые', accepted: 'Принятые', dismissed: 'Отклонённые' })) { %>
+            <a class="admin-tab<%= value === status ? ' is-current' : '' %>" href="?status=<%= value %>"><%= label %></a>
+        <% } %>
+    </nav>
+    <% if (!items.length) { %><p>Жалоб с этим статусом нет.</p><% } %>
+    <% for (const report of items) { %>
+        <article class="admin-record mb-3">
+            <h2 class="h6">№ <%= report.id %> · <a href="/admin/users/<%= report.seller_id %>"><%= report.seller_name %></a></h2>
+            <p class="mb-1"><%= reasons[report.reason] %> · <%= report.created_at.toLocaleDateString('ru-RU') %></p>
+            <% if (report.comment) { %><p><%= report.comment %></p><% } %>
+            <% if (report.status === 'open') { %>
+                <form method="post" action="/admin/seller-reports/<%= report.id %>">
+                    <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                    <input type="hidden" name="request_key" value="<%= requestKey() %>">
+                    <label for="reason-<%= report.id %>" class="form-label">Причина решения</label>
+                    <textarea id="reason-<%= report.id %>" name="reason" class="form-control mb-2" required maxlength="500" rows="2"></textarea>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-outline-success" name="status" value="accepted" data-confirm="Принять жалобу?">Принять жалобу</button>
+                        <button class="btn btn-outline-danger" name="status" value="dismissed" data-confirm="Отклонить жалобу?">Отклонить</button>
+                    </div>
+                </form>
+            <% } %>
+        </article>
+    <% } %>
+    <nav class="d-flex flex-wrap gap-3" aria-label="Страницы">
+        <% if (page > 1) { %><a href="?status=<%= status %>&amp;page=<%= page - 1 %>">Назад</a><% } %>
+        <% if (nextPage) { %><a href="?status=<%= status %>&amp;page=<%= page + 1 %>">Вперёд</a><% } %>
+    </nav>
+</main>
+</body>
+</html>

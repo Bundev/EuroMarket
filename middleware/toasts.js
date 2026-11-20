@@ -14,6 +14,10 @@ function browserRequest(req) {
 function backUrl(req) {
     if (/^\/(login|register)/.test(req.path)) return req.path.startsWith('/register') ? '/register' : '/login';
     if (['/profile', '/profile/phone', '/profile/viewing-history'].includes(req.path)) return '/profile';
+    if (req.path.startsWith('/profile/phone/verification/')) return '/profile#phone-verification';
+    const sellerReport = /^\/users\/([1-9]\d{0,9})\/report$/.exec(req.path);
+    if (sellerReport) return '/users/' + sellerReport[1];
+    if (req.path.startsWith('/admin/seller-reports')) return '/admin/seller-reports';
     if (req.path.startsWith('/recently-viewed')) return '/recently-viewed';
     if (req.path === '/following/settings') return '/following';
     if (req.path.startsWith('/saved-searches')) return '/saved-searches';

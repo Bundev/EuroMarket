@@ -17,7 +17,7 @@ async function page(req, res) {
     const page = id(req.query.page) || 1;
     const query = new URLSearchParams();
     let data;
-    if (section === 'dashboard') data = { stats: await model.stats() };
+    if (section === 'dashboard') data = { stats: res.locals.adminCounts };
     else if (section === 'users') {
         const search = text(req.query.search, 100);
         query.set('search', search);

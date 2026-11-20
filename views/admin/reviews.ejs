@@ -4,33 +4,60 @@
 <body class="bg-light">
 <%- include('../partials/toasts') %>
 <%- include('../partials/header') %>
-<main class="container py-4 review-page">
+<main class="container py-4 admin-page">
     <%- include('nav', { section: 'reviews' }) %>
-    <h1 class="h3">Модерация отзывов</h1>
-    <div class="d-flex gap-2 flex-wrap mb-3">
-        <a class="btn <%= complaintsOnly ? 'btn-primary' : 'btn-outline-primary' %>" href="/admin/reviews">Открытые жалобы</a>
-        <a class="btn <%= !complaintsOnly ? 'btn-primary' : 'btn-outline-primary' %>" href="/admin/reviews?filter=all">Все отзывы</a>
-    </div>
-    <% if (!reviews.length) { %><p>Отзывы по этому фильтру не найдены.</p><% } %>
+    <h1 class="h3 mb-3">Модерация отзывов</h1>
+    <% if (detail) { %>
+        <a class="d-inline-block mb-3" href="/admin/reviews">Назад к списку отзывов</a>
+    <% } else { %>
+        <nav class="admin-tabs mb-3" aria-label="Статус отзывов">
+            <% for (const [status, label] of Object.entries(filters)) { %>
+                <a class="admin-tab<%= filter === status ? ' is-current' : '' %>" href="/admin/reviews?filter=<%= status %>" <% if (filter === status) { %>aria-current="page"<% } %>>
+                    <%= label %> <span class="badge text-bg-light" data-review-count="<%= status %>"><%= counts[status] %></span>
+                </a>
+            <% } %>
+        </nav>
+        <% if (!reviews.length) { %><p class="admin-record"><%= ({
+            pending: 'Нет отзывов, ожидающих проверки.', all: 'Отзывов пока нет.',
+            approved: 'Одобренных отзывов пока нет.', rejected: 'Отклонённых отзывов пока нет.'
+        })[filter] %></p><% } %>
+    <% } %>
     <% for (const review of reviews) { %>
-        <article class="card card-body mb-3">
-            <h2 class="h6"><%= review.author %> → <a href="/users/<%= review.seller_id %>/reviews"><%= review.seller %></a></h2>
-            <p><%= review.rating %> из 5 · <%= review.hidden_at ? 'Скрыт' : 'Виден' %></p>
-            <% if (review.comment) { %><p class="review-comment"><%= review.comment %></p><% } %>
-            <p><a href="/admin/reviews/<%= review.deal_id %>/reports">Жалобы (открытых: <%= review.open_reports %>)</a></p>
-            <form method="post" action="/admin/reviews/<%= review.deal_id %>">
+        <% const status = review.moderation_status; %>
+        <article class="admin-record mb-3">
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-2">
+                <h2 class="h6 mb-0">Отзыв №<%= review.deal_id %></h2>
+                <%- include('status', { tone: status === 'approved' ? 'success' : status === 'rejected' ? 'danger' : 'warning',
+                    label: {pending:'Ожидает проверки',approved:'Одобрен',rejected:'Отклонён'}[status] }) %>
+            </div>
+            <p class="small text-muted"><time datetime="<%= review.created_at.toISOString() %>"><%= review.created_at.toLocaleString('ru-RU') %></time>
+                · <a href="/deals/<%= review.deal_id %>">Сделка №<%= review.deal_id %></a>
+                <% if (review.listing_title) { %> · <%= review.listing_title %><% } %>
+            </p>
+            <p>Автор: <a href="/admin/users/<%= review.buyer_id %>"><%= review.author %></a>
+                · Продавец: <a href="/admin/users/<%= review.seller_id %>"><%= review.seller %></a></p>
+            <p><span class="text-warning" aria-hidden="true"><%= '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating) %></span> <%= review.rating %> из 5</p>
+            <p class="review-comment"><%= review.comment || 'Комментарий не добавлен.' %></p>
+            <% if (review.moderation_reason) { %><p class="review-comment"><strong>Причина отклонения:</strong> <%= review.moderation_reason %></p><% } %>
+            <% if (!detail) { %><p><a href="/admin/reviews/<%= review.deal_id %>">Детали отзыва</a></p><% } %>
+            <form method="post" action="/admin/reviews/<%= review.deal_id %>" class="admin-action">
                 <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                <input type="hidden" name="version" value="<%= review.moderation_version %>">
                 <input type="hidden" name="request_key" value="<%= requestKey() %>">
-                <label class="form-label" for="mod-reason-<%= review.deal_id %>">Причина решения</label>
-                <input class="form-control mb-2" id="mod-reason-<%= review.deal_id %>" name="reason" required maxlength="500">
+                <% if (status !== 'rejected') { %>
+                    <label class="form-label" for="mod-reason-<%= review.deal_id %>">Причина отклонения</label>
+                    <textarea class="form-control mb-2" id="mod-reason-<%= review.deal_id %>" name="reason" required maxlength="500" rows="2"></textarea>
+                <% } %>
                 <div class="d-flex flex-wrap gap-2">
-                    <button class="btn btn-outline-primary" name="mode" value="<%= review.hidden_at ? 'restore' : 'hide' %>"><%= review.hidden_at ? 'Восстановить отзыв' : 'Скрыть отзыв' %></button>
-                    <% if (Number(review.open_reports)) { %><button class="btn btn-outline-secondary" name="mode" value="dismiss">Закрыть жалобы</button><% } %>
+                    <% if (status !== 'approved') { %><button type="submit" class="btn btn-outline-success" name="mode" value="approve" formnovalidate>Одобрить</button><% } %>
+                    <% if (status !== 'rejected') { %><button type="submit" class="btn btn-outline-danger" name="mode" value="reject" data-confirm="Отклонить отзыв?">Отклонить</button><% } %>
                 </div>
             </form>
         </article>
     <% } %>
-    <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => '/admin/reviews?filter=' + (complaintsOnly ? 'open' : 'all') + '&page=' + value }) %>
+    <% if (!detail) { %>
+        <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => '/admin/reviews?filter=' + filter + '&page=' + value }) %>
+    <% } %>
 </main>
 </body>
 </html>

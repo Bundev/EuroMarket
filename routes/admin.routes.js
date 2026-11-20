@@ -4,6 +4,7 @@ const controller = require('../controllers/admin.controller');
 const reviews = require('../controllers/review.controller');
 const listingModeration = require('../controllers/listingModeration.controller');
 const disputes = require('../controllers/dispute.controller');
+const trust = require('../controllers/sellerTrust.controller');
 const requireAdmin = require('../middleware/admin');
 const requireAuth = require('../middleware/auth');
 const csrf = require('../middleware/contactCsrf');
@@ -13,7 +14,7 @@ const handle = fn => async (req, res, next) => {
     catch (error) {
         if ([400, 403, 404, 409].includes(error.status)) return res.status(error.status).send(error.message);
         if (['ER_LOCK_DEADLOCK','ER_LOCK_WAIT_TIMEOUT','ER_CHECKREAD'].includes(error.code)) {
-            return res.status(409).send('Объявление изменилось. Обновите страницу и повторите проверку.');
+            return res.status(409).send('Данные изменились. Обновите страницу и повторите проверку.');
         }
         logError('Ошибка модерации:', error);
         res.status(500).send('Не удалось выполнить действие. Обновите страницу и повторите попытку.');
@@ -25,9 +26,15 @@ router.get('/admin/users/:id', handle(controller.user));
 router.get('/admin/moderation', handle(listingModeration.queue));
 router.post('/admin/moderation/:id', handle(listingModeration.decide));
 router.get('/admin/reviews', handle(reviews.adminPage));
-router.get('/admin/reviews/:id/reports', handle(reviews.adminComplaints));
+router.get('/admin/reviews/:id/reports', (req, res) => res.redirect(302, '/admin/reports/reviews/' + encodeURIComponent(req.params.id)));
+router.get('/admin/reviews/:id', handle(reviews.adminDetail));
+router.get('/admin/reports/reviews', handle(reviews.adminComplaintQueue));
+router.get('/admin/reports/reviews/:id', handle(reviews.adminComplaints));
+router.post('/admin/reports/reviews/:id', handle(reviews.adminChange));
 router.post('/admin/reviews/:id', handle(reviews.adminChange));
 router.get('/admin/disputes', handle(disputes.queue));
+router.get('/admin/seller-reports', handle(trust.queue));
+router.post('/admin/seller-reports/:id', handle(trust.decide));
 router.post('/admin/disputes/:id', createPhoneLimiter({ limit: 30, keyFor: req => String(req.session.user.id) }), handle(disputes.decide));
 for (const section of ['users', 'listings', 'reports', 'logs']) {
     router.get('/admin/' + section, (req, res, next) => {

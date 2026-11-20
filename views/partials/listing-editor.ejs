@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <%- include('./head', { pageTitle: listing ? 'Редактирование объявления' : 'Новое объявление' }) %>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css">
+</head>
+<body class="bg-light">
+<%- include('./toasts') %>
+<%- include('./header') %>
+<main class="container py-4 listing-editor">
+    <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-3">
+        <div><h1 class="h3 mb-1"><%= listing ? 'Редактирование объявления' : 'Новое объявление' %></h1>
+            <p class="text-muted mb-0"><%= listing ? listing.title : 'Сохраните черновик и отправьте его на проверку, когда будете готовы.' %></p></div>
+        <a class="btn btn-outline-secondary" href="/my-listings">Мои объявления</a>
+    </div>
+    <% if (listing && ['active','pending_review'].includes(listing.status)) { %>
+        <p class="alert alert-info">Изменения отправляются на проверку. До одобрения объявление скрыто из каталога.</p>
+    <% } %>
+    <% const steps = ['Категория и место', 'Описание и цена', 'Характеристики', 'Фотографии', 'Предпросмотр']; %>
+    <nav class="editor-progress mb-3" aria-label="Этапы объявления" hidden>
+        <p class="small fw-semibold mb-2" data-editor-progress aria-live="polite"></p>
+        <ol class="list-unstyled mb-0">
+            <% steps.forEach((label, index) => { %>
+                <li><button class="btn btn-outline-primary btn-sm w-100" type="button" data-editor-go="<%= index %>" aria-label="Этап <%= index + 1 %>: <%= label %>"><span><%= index + 1 %></span><span class="editor-step-label"><%= label %></span></button></li>
+            <% }) %>
+        </ol>
+    </nav>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <span class="small text-muted" data-editor-save-status role="status"></span>
+        <button class="btn btn-sm btn-outline-primary" type="button" data-editor-restore hidden>Восстановить локальные изменения</button>
+    </div>
+    <noscript><p class="alert alert-warning">Включите JavaScript для сохранения и загрузки фотографий.</p></noscript>
+    <form action="<%= listing ? '/listings/' + listing.id + '/edit' : '/listings' %>" method="post"
+          enctype="multipart/form-data" data-listing-editor data-draft-key="<%= user.id %>:<%= listing?.id || 'new' %>"
+          data-version="<%= listing?.review_version ?? 'new' %>" data-status="<%= listing?.status || 'new' %>">
+        <% if (listing) { %>
+            <input type="hidden" name="editor_version" value="<%= listing.review_version %>">
+            <input type="hidden" name="photo_order" value="<%= photos.map(photo => 'id:' + photo.id).join(',') %>">
+        <% } %>
+        <section class="card card-body shadow-sm editor-section" data-editor-step aria-labelledby="editor-location">
+            <h2 class="h5" id="editor-location" tabindex="-1">Категория и местоположение</h2>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="listing-category" class="form-label">Категория <span aria-hidden="true">*</span></label>
+                    <select id="listing-category" name="category_id" class="form-select" required>
+                        <option value="">Выберите категорию</option>
+                        <% for (const category of categories) { %><option value="<%= category.id %>" <%= Number(category.id) === Number(listing?.category_id) ? 'selected' : '' %>><%= category.name %></option><% } %>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="countrySelect" class="form-label">Страна <span aria-hidden="true">*</span></label>
+                    <select id="countrySelect" name="country_id" class="form-select" required>
+                        <option value="">Выберите страну</option>
+                        <% for (const country of countries) { %><option value="<%= country.id %>" data-currency="<%= country.currency %>" <%= Number(country.id) === Number(listing?.country_id) ? 'selected' : '' %>><%= country.name %></option><% } %>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="citySelect" class="form-label">Город</label>
+                    <select id="citySelect" name="city_id" class="form-select">
+                        <option value="">Выберите город</option>
+                        <% if (listing?.city_id && listing.city_name) { %><option value="<%= listing.city_id %>" selected><%= listing.city_name %></option><% } %>
+                    </select>
+                    <p class="form-text mb-0" data-editor-city-status aria-live="polite">Город можно оставить пустым.</p>
+                </div>
+            </div>
+        </section>
+        <section class="card card-body shadow-sm editor-section" data-editor-step aria-labelledby="editor-content">
+            <h2 class="h5" id="editor-content" tabindex="-1">Название, описание и цена</h2>
+            <label class="form-label" for="editor-title">Название <span aria-hidden="true">*</span></label>
+            <input class="form-control" id="editor-title" name="title" value="<%= listing?.title || '' %>" maxlength="200" required aria-describedby="editor-title-help">
+            <p class="form-text" id="editor-title-help">Укажите товар, бренд или модель. <span data-editor-count="title"></span></p>
+            <label class="form-label" for="listing-description">Описание <span aria-hidden="true">*</span></label>
+            <textarea id="listing-description" name="description" class="form-control" rows="5" required aria-describedby="editor-description-help"><%= listing?.description || '' %></textarea>
+            <p class="form-text" id="editor-description-help">Укажите состояние, комплектацию и заметные дефекты. <span data-editor-count="description"></span></p>
+            <label class="form-label" for="editor-price">Цена <span data-editor-currency></span> <span aria-hidden="true">*</span></label>
+            <input id="editor-price" class="form-control" type="number" inputmode="decimal" name="price" min="0" max="9999999999.99" step="0.01"
+                   value="<%= listing?.price ?? '' %>" required aria-describedby="editor-price-help">
+            <p class="form-text" id="editor-price-help">Валюта зависит от страны. При смене страны проверьте сумму.</p>
+            <label for="bargaining-enabled" class="form-label">Разрешить торг</label>
+            <select id="bargaining-enabled" name="bargaining_enabled" class="form-select">
+                <option value="0" <%= listing?.bargaining_enabled ? '' : 'selected' %>>Нет</option>
+                <option value="1" <%= listing?.bargaining_enabled ? 'selected' : '' %>>Да</option>
+            </select>
+        </section>
+        <section class="card card-body shadow-sm editor-section" data-editor-step aria-labelledby="editor-attributes">
+            <h2 class="h5" id="editor-attributes" tabindex="-1">Характеристики</h2>
+            <%- include('./attribute-fields', { groups: attributeGroups, categorySelect: 'listing-category',
+                selectedCategoryId: listing?.category_id, filterMode: false, values: attributeValues, legacyCondition: listing?.item_condition }) %>
+        </section>
+        <section class="card card-body shadow-sm editor-section" data-editor-step aria-labelledby="editor-photos">
+            <h2 class="h5" id="editor-photos" tabindex="-1">Фотографии</h2>
+            <p class="text-muted small" id="editor-photo-rules">До 10 фотографий JPEG, PNG или WebP, до 5 МБ каждая.</p>
+            <div class="listing-upload-zone editor-drop-zone rounded-3 mb-3" data-editor-drop>
+                <span class="editor-camera" aria-hidden="true">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                        <path d="M3 6h4l2-3h6l2 3h4a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="4"/>
+                    </svg>
+                </span>
+                <p class="fw-semibold mb-1" data-editor-photo-empty>Покажите товар на фотографиях</p>
+                <p class="small text-muted mb-2">Перетащите файлы сюда или добавьте их с устройства.</p>
+                <button type="button" class="btn btn-primary" data-editor-pick aria-describedby="editor-photo-rules">Добавить фотографии</button>
+                <input type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple data-editor-files hidden>
+                <p class="small fw-semibold mt-2 mb-0" data-editor-photo-count aria-live="polite"></p>
+            </div>
+            <p class="text-muted small">Снимайте при хорошем освещении. Покажите товар целиком, детали и заметные дефекты.</p>
+            <p data-editor-photo-error class="text-danger small mb-2" role="alert"></p>
+            <div class="small mb-2" data-editor-photo-removals hidden>
+                <span data-editor-photo-removal-count></span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-editor-undo-photo>Отменить последнее удаление</button>
+            </div>
+            <ul class="editor-photo-grid list-unstyled mb-0" data-editor-photos>
+                <% for (const photo of photos) { %><li data-editor-photo="<%= photo.id %>"><img src="<%= photo.image_path %>" alt="Фотография объявления"></li><% } %>
+            </ul>
+        </section>
+        <section class="card card-body shadow-sm editor-section" data-editor-step aria-labelledby="editor-review">
+            <h2 class="h5" id="editor-review" tabindex="-1">Предпросмотр и публикация</h2>
+            <div class="row g-3">
+                <div class="col-md-5" data-preview-images></div>
+                <div class="col-md-7">
+                    <h3 class="h5 text-break" data-preview-title></h3>
+                    <p class="marketplace-price" data-preview-price></p>
+                    <p class="text-muted small" data-preview-location></p>
+                    <p class="editor-preview-description" data-preview-description></p>
+                    <dl class="small" data-preview-attributes></dl>
+                </div>
+            </div>
+            <p class="small text-muted mt-3 mb-0"><%= listing ? 'Сохраните изменения перед отправкой объявления на проверку.' : 'После сохранения черновика вы сможете отправить объявление на проверку.' %></p>
+        </section>
+        <p data-editor-error class="alert alert-danger mt-3 mb-0" role="alert" hidden></p>
+        <div class="editor-actions d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary" type="button" data-editor-back hidden>Назад</button>
+                <button class="btn btn-primary" type="button" data-editor-next hidden>Продолжить</button>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-outline-primary" type="button" data-editor-local hidden>Сохранить на устройстве</button>
+                <button class="btn btn-primary" type="submit" data-editor-submit disabled><%= listing ? 'Сохранить изменения' : 'Сохранить черновик' %></button>
+                <% if (listing && ['draft','rejected'].includes(listing.status) && !listing.moderation_locked) { %>
+                    <button class="btn btn-success" type="submit" form="editor-publish" data-editor-publish hidden>Отправить на проверку</button>
+                <% } %>
+            </div>
+        </div>
+    </form>
+    <% if (listing) { %>
+        <% if (['draft','rejected'].includes(listing.status) && !listing.moderation_locked) { %>
+            <form id="editor-publish" action="/listings/<%= listing.id %>/publish" method="post"><input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>"></form>
+        <% } %>
+    <% } %>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js" defer></script>
+<script src="/js/listing-editor.js" defer></script>
+</body>
+</html>

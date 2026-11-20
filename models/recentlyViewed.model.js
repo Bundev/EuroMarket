@@ -14,7 +14,7 @@ async function record(userId, listingId) {
         if (!user?.save_listing_history) return;
         const [[listing]] = await connection.execute(
             `SELECT l.id FROM listings l JOIN users seller ON seller.id=l.user_id AND seller.status='active'
-             WHERE l.id=? AND l.status='active' AND l.moderation_locked=0 AND l.user_id<>?`, [listingId, userId]
+             WHERE l.id=? AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>UTC_TIMESTAMP(3)) AND l.moderation_locked=0 AND l.user_id<>?`, [listingId, userId]
         );
         if (!listing) return;
 
@@ -54,7 +54,7 @@ async function preview(userId, excludedListingId = null) {
              SELECT l.id,l.title,l.price,l.currency,v.id AS view_id
              FROM recently_viewed v JOIN listings l ON l.id=v.listing_id
              JOIN users seller ON seller.id=l.user_id AND seller.status='active'
-             WHERE v.user_id=? AND l.status='active' AND l.moderation_locked=0
+             WHERE v.user_id=? AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>UTC_TIMESTAMP(3)) AND l.moderation_locked=0
              ${excludedListingId === null ? '' : 'AND l.id<>?'}
              ORDER BY v.id DESC LIMIT 4
          ) recent ORDER BY recent.view_id DESC`,

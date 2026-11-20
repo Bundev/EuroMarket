@@ -2,6 +2,8 @@ const model = require('../models/savedSearch.model');
 const { getAllCategories } = require('../models/category.model');
 const criteria = require('../services/searchFilters');
 const { flash } = require('../middleware/toasts');
+const attributes = require('../services/listingAttributes');
+const { SEARCH_SORTS } = require('../models/listing.model');
 
 function id(value) {
     if (/^[1-9]\d{0,19}$/.test(value) && BigInt(value) <= 18446744073709551615n) return value;
@@ -14,10 +16,20 @@ function privatePage(res) {
 
 async function create(req, res) {
     privatePage(res);
-    const parsed = await criteria.parse(req.body || {}, res.locals.countries, await getAllCategories());
+    const categories = await getAllCategories();
+    const parsed = await criteria.parse(req.body || {}, res.locals.countries, categories);
     const error = parsed.locationError || parsed.filterError;
     if (error) return res.status(400).send(error);
     const filters = parsed.filters;
+    const sort = req.body?.sort ?? 'newest';
+    if (typeof sort !== 'string' || !Object.hasOwn(SEARCH_SORTS, sort) ||
+        (!filters.currency && sort.startsWith('price_'))) return res.status(400).send('Проверьте сортировку и валюту.');
+    filters.sort = sort;
+    try {
+        filters.attributeQuery = attributes.filters(attributes.fieldsFor(filters.categoryId, categories), req.body || {}).query.toString();
+    } catch (error) { return res.status(400).send(error.message); }
+    const editId = req.body?.saved_search_id;
+    if (editId !== undefined && (typeof editId !== 'string' || !id(editId) || !req.session.user)) return res.sendStatus(404);
     if (!req.session.user) {
         req.session.pendingSavedSearch = filters;
         flash(req, 'info', 'Войдите, чтобы сохранить поиск.');
@@ -26,7 +38,9 @@ async function create(req, res) {
     const name = req.body?.name === undefined ? filters.search || 'Поиск объявлений' :
         typeof req.body.name === 'string' ? req.body.name.trim() : '';
     if (!name || name.length > 100) return res.status(400).send('Введите название поиска до 100 символов.');
-    const result = await model.create(req.session.user.id, name, filters);
+    const result = await model.create(req.session.user.id, name, filters, editId);
+    if (result === 'missing') return res.sendStatus(404);
+    if (result === 'exists' && editId) return res.status(409).send('Поиск с такими условиями уже существует.');
     if (result === 'unauthorized') return res.redirect(303, '/login');
     if (result === 'limit') return res.status(409).send('Можно сохранить до 30 поисков.');
     delete req.session.pendingSavedSearch;
@@ -36,7 +50,12 @@ async function create(req, res) {
 
 async function page(req, res) {
     privatePage(res);
-    res.render('pages/saved-searches', { searches: await model.list(req.session.user.id) });
+    const [searches, categories] = await Promise.all([model.list(req.session.user.id), getAllCategories()]);
+    for (const search of searches) {
+        try { search.attributeLabels = attributes.labels(attributes.savedFilters(search.categoryId, categories, search.attributeQuery).constraints); }
+        catch { search.attributeLabels = []; search.stale = true; }
+    }
+    res.render('pages/saved-searches', { searches });
 }
 
 function pending(req, res) {
@@ -54,7 +73,9 @@ async function open(req, res) {
     const searchId = id(req.params.id);
     const search = searchId && await model.find(req.session.user.id, searchId);
     if (!search) return res.status(404).send('Поиск не найден.');
-    res.redirect(criteria.url(search));
+    const url = new URL(criteria.url(search), 'http://localhost');
+    if (req.query.edit === '1') url.searchParams.set('edit_saved', searchId);
+    res.redirect(url.pathname + url.search);
 }
 
 async function change(req, res) {

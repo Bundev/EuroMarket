@@ -3,6 +3,7 @@ const reviews = require('../models/review.model');
 const { moderateReview } = require('../models/admin.model');
 const { flash } = require('../middleware/toasts');
 const seo = require('../services/seo');
+const filters = { pending: 'Ожидают проверки', all: 'Все отзывы', approved: 'Одобрены', rejected: 'Отклонены' };
 
 function id(value) {
     return typeof value === 'string' && /^[1-9]\d{0,9}$/.test(value) && Number(value) <= 4294967295 ? Number(value) : null;
@@ -13,6 +14,8 @@ async function page(req, res) {
     if (!sellerId) return res.status(404).send('Продавец не найден.');
     res.set('Cache-Control', 'no-store');
     const data = await reviews.list(sellerId, id(req.query.page) || 1);
+    res.locals.pageBreadcrumbs = require('../services/breadcrumbs').trail(
+        { name: data.seller.name, path: seo.sellerProfilePath(sellerId) }, { name: 'Отзывы', path: seo.sellerPath(sellerId) });
     const suffix = data.page > 1 ? ' · страница ' + data.page : '';
     seo.apply(res, {
         path: seo.pagedPath(seo.sellerPath(sellerId), data.page),
@@ -31,7 +34,7 @@ async function save(req, res) {
         return res.status(400).send('Укажите от 1 до 5 звёзд и комментарий не длиннее 1500 символов.');
     }
     await reviews.save(dealId, req.session.user.id, Number(rating), comment.trim(), mode === 'edit');
-    flash(req, 'success', mode === 'edit' ? 'Отзыв обновлён.' : 'Отзыв опубликован.');
+    flash(req, 'success', 'Отзыв отправлен на модерацию.');
     res.redirect(303, '/my-purchases');
 }
 
@@ -45,28 +48,40 @@ async function report(req, res) {
 }
 
 async function adminPage(req, res) {
-    const complaintsOnly = req.query.filter !== 'all';
-    const result = await reviews.moderation(id(req.query.page) || 1, complaintsOnly);
-    res.render('admin/reviews', { ...result, complaintsOnly, requestKey: () => crypto.randomUUID() });
+    const filter = typeof req.query.filter === 'string' && Object.hasOwn(filters, req.query.filter) ? req.query.filter : 'pending';
+    const result = await reviews.moderation(id(req.query.page) || 1, filter);
+    res.render('admin/reviews', { ...result, filters, filter, detail: false, requestKey: crypto.randomUUID });
+}
+
+async function adminDetail(req, res) {
+    const dealId = id(req.params.id);
+    if (!dealId) return res.sendStatus(404);
+    res.render('admin/reviews', { reviews: [await reviews.moderationDetail(dealId)], filters, detail: true, requestKey: crypto.randomUUID });
+}
+
+async function adminComplaintQueue(req, res) {
+    res.render('admin/review-report-queue', await reviews.complaintQueue(id(req.query.page) || 1));
 }
 
 async function adminComplaints(req, res) {
     const dealId = id(req.params.id);
     if (!dealId) return res.status(404).send('Отзыв не найден.');
-    res.render('admin/review-reports', await reviews.complaints(dealId, id(req.query.page) || 1));
+    res.render('admin/review-reports', { ...await reviews.complaints(dealId, id(req.query.page) || 1), requestKey: crypto.randomUUID });
 }
 
 async function adminChange(req, res) {
     const dealId = id(req.params.id);
-    const { mode, reason, request_key: key } = req.body || {};
-    if (!dealId || !['hide', 'restore', 'dismiss'].includes(mode) ||
-        typeof reason !== 'string' || !reason.trim() || reason.length > 500 ||
+    const { mode, reason = '', request_key: key, version } = req.body || {};
+    const complaint = req.path.startsWith('/admin/reports/reviews/');
+    if (!dealId || !(complaint ? ['dismiss'] : ['approve', 'reject']).includes(mode) ||
+        typeof version !== 'string' || !/^\d{1,10}$/.test(version) || Number(version) > 4294967295 ||
+        typeof reason !== 'string' || (mode !== 'approve' && !reason.trim()) || reason.length > 500 ||
         typeof key !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(key)) {
         return res.status(400).send('Проверьте действие и причину модерации.');
     }
-    await moderateReview(Number(res.locals.admin.id), dealId, mode, reason.trim(), key.toLowerCase());
-    flash(req, 'success', { hide: 'Отзыв скрыт.', restore: 'Видимость отзыва восстановлена.', dismiss: 'Жалобы закрыты.' }[mode]);
-    res.redirect(303, '/admin/reviews?filter=all');
+    await moderateReview(Number(res.locals.admin.id), dealId, Number(version), mode, reason.trim(), key.toLowerCase());
+    flash(req, 'success', { approve: 'Отзыв одобрен.', reject: 'Отзыв отклонён.', dismiss: 'Жалобы закрыты.' }[mode]);
+    res.redirect(303, mode === 'dismiss' ? '/admin/reports/reviews/' + dealId : '/admin/reviews/' + dealId);
 }
 
-module.exports = { page, save, report, adminPage, adminComplaints, adminChange };
+module.exports = { page, save, report, adminPage, adminDetail, adminComplaintQueue, adminComplaints, adminChange };

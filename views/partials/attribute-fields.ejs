@@ -1,0 +1,67 @@
+<% if (groups.length) { %>
+    <div data-attribute-fields data-category-select="<%= categorySelect %>" data-category-id="<%= selectedCategoryId ?? '' %>">
+        <div data-attribute-current></div>
+        <% for (const group of groups) { %>
+            <template data-category-ids="<%= group.ids.join(',') %>">
+                <fieldset class="mb-3">
+                    <legend class="h6"><%= filterMode ? 'Характеристики для поиска' : 'Характеристики' %></legend>
+                    <% if (!filterMode) { %><input type="hidden" name="attributes_form" value="1"><% } %>
+                    <div class="row g-2">
+                        <% for (const field of group.fields) {
+                            const name = 'attr_' + field.key;
+                            const label = field.unit ? field.label + ', ' + field.unit : field.label;
+                            const coded = field.key === 'condition';
+                            const saved = !filterMode && coded ? values.get(field.key) ?? (typeof legacyCondition === 'undefined' ? null : legacyCondition) : null;
+                            const matched = saved && field.options.find(option => option.code === saved || option.aliases.includes(saved));
+                            const value = filterMode ? values.get(name) : coded ? matched?.code : values.get(field.key);
+                        %>
+                            <% if (filterMode && field.type === 'number') { %>
+                                <% for (const [suffix, bound] of [['min','от'],['max','до']]) { %>
+                                    <div class="col-6 col-md-4">
+                                        <label class="form-label" for="<%= name + '_' + suffix %>"><%= label %> <%= bound %></label>
+                                        <input class="form-control" id="<%= name + '_' + suffix %>" name="<%= name + '_' + suffix %>"
+                                               type="number" min="<%= field.min %>" max="<%= field.max %>" step="<%= field.decimals ? '0.01' : '1' %>"
+                                               value="<%= values.get(name + '_' + suffix) ?? '' %>">
+                                    </div>
+                                <% } %>
+                            <% } else { %>
+                                <div class="<%= coded && !filterMode ? 'col-12' : 'col-12 col-sm-6 col-lg-4' %>">
+                                    <label class="form-label" for="<%= name %>"><%= label %></label>
+                                    <% if (field.type === 'enum') { %>
+                                        <select class="form-select" id="<%= name %>" name="<%= name %>" <%- coded && !filterMode ? 'aria-describedby="condition-help"' : '' %>
+                                                <% if (filterMode) { %>multiple size="3"<% } else if (field.required) { %>required<% } %>>
+                                            <% if (!filterMode) { %><option value=""><%= saved ? 'Оставить прежнее' : 'Не указано' %></option><% } %>
+                                            <% for (const option of field.options) { %>
+                                                <% const code = coded ? option.code : option; %>
+                                                <option value="<%= code %>" <%= (filterMode ? values.getAll(name).includes(code) : value === code) ? 'selected' : '' %>><%= coded ? option.label : option %></option>
+                                            <% } %>
+                                        </select>
+                                        <% if (coded && !filterMode) { %>
+                                            <div class="form-text" id="condition-help">
+                                                <% if (saved && !matched) { %><p class="mb-1 text-break">Прежнее значение: «<%= saved %>». Выберите подходящий вариант, чтобы его обновить.</p><% } %>
+                                                <details class="mt-2">
+                                                    <summary class="fw-semibold">Как выбрать состояние</summary>
+                                                    <dl class="mt-2 mb-0">
+                                                        <% for (const option of field.options) { %><dt><%= option.label %></dt><dd><%= option.hint %></dd><% } %>
+                                                    </dl>
+                                                </details>
+                                            </div>
+                                        <% } %>
+                                    <% } else if (field.type === 'number') { %>
+                                        <input class="form-control" id="<%= name %>" name="<%= name %>" value="<%= value ?? '' %>"
+                                               type="number" min="<%= field.min %>" max="<%= field.max %>" step="<%= field.decimals ? '0.01' : '1' %>"
+                                               <%= field.required ? 'required' : '' %>>
+                                    <% } else { %>
+                                        <input class="form-control" id="<%= name %>" name="<%= name %>" value="<%= value ?? '' %>"
+                                               maxlength="100" <%= !filterMode && field.required ? 'required' : '' %>>
+                                    <% } %>
+                                </div>
+                            <% } %>
+                        <% } %>
+                    </div>
+                </fieldset>
+            </template>
+        <% } %>
+    </div>
+    <script src="/js/listing-attributes.js" defer></script>
+<% } %>

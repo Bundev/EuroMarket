@@ -34,6 +34,7 @@ router.post(
     '/listings/:id/edit',
     contactCsrf,
     requireAuth,
+    uploadListing.array('images', 10, 18),
     listingController.update
 );
 

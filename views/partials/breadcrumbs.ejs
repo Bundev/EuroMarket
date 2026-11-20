@@ -1,0 +1,13 @@
+<% if (typeof pageBreadcrumbs !== 'undefined' && pageBreadcrumbs.length > 1) { %>
+    <nav class="container site-breadcrumbs" aria-label="Хлебные крошки">
+        <ol>
+            <% for (const [index, item] of pageBreadcrumbs.entries()) { %>
+                <% if (index === pageBreadcrumbs.length - 1) { %>
+                    <li aria-current="page"><%= item.name %></li>
+                <% } else { %>
+                    <li><a href="<%= item.path %>"><%= item.name %></a></li>
+                <% } %>
+            <% } %>
+        </ol>
+    </nav>
+<% } %>

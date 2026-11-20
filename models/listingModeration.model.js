@@ -27,11 +27,6 @@ async function contentChanged(connection, listing) {
     return pending;
 }
 
-async function stats() {
-    const [[row]] = await db.query("SELECT COUNT(*) AS total FROM listings WHERE status='pending_review'");
-    return Number(row.total);
-}
-
 async function queue({ page, country, category }) {
     const clauses = ["l.status='pending_review'"];
     const values = [];
@@ -52,4 +47,4 @@ async function queue({ page, country, category }) {
     return { items, page, totalPages };
 }
 
-module.exports = { editableStatuses, lockEditable, contentChanged, stats, queue, fail };
+module.exports = { editableStatuses, lockEditable, contentChanged, queue, fail };

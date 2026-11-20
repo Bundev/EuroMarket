@@ -1,6 +1,7 @@
 <% if (deal.review_rating) { %>
     <p class="mt-3 mb-1">Ваша оценка: <%= deal.review_rating %> из 5.
-        <% if (deal.review_hidden_at) { %>Отзыв скрыт модератором.<% } %>
+        <% if (deal.review_status === 'pending') { %>Отзыв ожидает проверки.<% } %>
+        <% if (deal.review_status === 'rejected') { %>Отзыв отклонён.<% if (deal.review_reason) { %> <%= deal.review_reason %><% } %><% } %>
     </p>
 <% } %>
 <% if (!deal.review_rating || deal.review_editable) { %>

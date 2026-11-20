@@ -14,20 +14,6 @@
 
 <main class="container py-4" <%- isFavoritesPage ? 'data-favorites-page' : '' %>>
 
-    <% if (category) { %>
-        <nav aria-label="Хлебные крошки">
-            <ol class="breadcrumb flex-wrap">
-                <li class="breadcrumb-item"><a href="/">Главная</a></li>
-                <% breadcrumbs.forEach(item => { %>
-                    <% if (Number(item.id) === Number(category.id)) { %>
-                        <li class="breadcrumb-item active" aria-current="page"><%= item.name %></li>
-                    <% } else { %>
-                        <li class="breadcrumb-item"><a href="<%= categoryLink(item.slug) %>"><%= item.name %></a></li>
-                    <% } %>
-                <% }) %>
-            </ol>
-        </nav>
-    <% } %>
     <h2 class="fw-bold mb-4"><%= isFavoritesPage ? 'Избранное' : category ? category.name : 'Поиск объявлений' %></h2>
     <% if (isFavoritesPage && unavailableFavorites > 0) { %>
         <div class="alert alert-info" role="status">
@@ -47,6 +33,10 @@
  
 <form action="<%= searchAction %>" method="GET"
       class="search-filter-form mb-4">
+    <% if (editingSearch) { %>
+        <p class="alert alert-light border">Изменение условий поиска «<%= editingSearch.name %>»</p>
+        <input type="hidden" name="edit_saved" value="<%= editingSearch.id %>">
+    <% } %>
 
     <% if (category || isFavoritesPage) { %>
     <div class="mb-3">
@@ -164,6 +154,8 @@
         </div>
     </div>
 
+    <%- include('../partials/attribute-fields', { groups: attributeGroups, categorySelect: 'searchCategory',
+        selectedCategoryId: category?.id, filterMode: true, values: attributeQuery }) %>
     <% if (filterError) { %>
         <div class="alert alert-danger" role="alert"><%= filterError %></div>
     <% } %>
@@ -188,7 +180,11 @@
                 <form method="post" action="/saved-searches">
                     <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
                     <%- include('../partials/saved-search-fields', { fields: saveFields }) %>
-                    <button type="submit" class="btn btn-outline-primary">Сохранить поиск</button>
+                    <% if (editingSearch) { %>
+                        <input type="hidden" name="saved_search_id" value="<%= editingSearch.id %>">
+                        <input type="hidden" name="name" value="<%= editingSearch.name %>">
+                    <% } %>
+                    <button type="submit" class="btn btn-outline-primary"><%= editingSearch ? 'Сохранить условия' : 'Сохранить поиск' %></button>
                 </form>
             <% } %>
             <%- include('../partials/listing-view-toggle') %>

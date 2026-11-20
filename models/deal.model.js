@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const transaction = require('../config/transaction');
 const { insertDealEvent } = require('./notification.model');
+const { requireGoodsCategory } = require('./category.model');
 
 function fail(message, status = 409) {
     throw Object.assign(new Error(message), { status });
@@ -13,7 +14,8 @@ async function lockParties(connection, buyer, seller) {
 
 async function lockListing(connection, listingId) {
     const [[listing]] = await connection.execute(
-        'SELECT id,user_id,title,status,moderation_locked,price,currency,bargaining_enabled,review_version FROM listings WHERE id=? FOR UPDATE', [listingId]
+        `SELECT id,user_id,category_id,title,status,moderation_locked,price,currency,bargaining_enabled,review_version,
+                COALESCE(expires_at<=UTC_TIMESTAMP(3),FALSE) AS is_expired FROM listings WHERE id=? FOR UPDATE`, [listingId]
     );
     return listing;
 }
@@ -33,9 +35,10 @@ async function requestPurchase(listingId, buyer, requestKey, negotiationId) {
             [buyer, listingId, requestKey]
         );
         if (replayed) fail('Этот запрос на покупку уже отправлен.');
-        if (listing.status !== 'active' || listing.moderation_locked) {
+        if (listing.status !== 'active' || listing.is_expired || listing.moderation_locked) {
             fail('Объявление недоступно для покупки.', 404);
         }
+        await requireGoodsCategory(connection, listing.category_id);
         const [[existing]] = await connection.execute('SELECT id FROM deals WHERE listing_id=? AND open_buyer_id=? FOR UPDATE', [listingId, buyer]);
         if (existing) fail('У вас уже есть открытый запрос по этому объявлению.');
         const [[reserved]] = await connection.execute('SELECT id FROM deals WHERE reserved_listing_id=? FOR UPDATE', [listingId]);
@@ -126,7 +129,7 @@ async function transition(id, actor, action) {
         if (!active || !listing || Number(listing.user_id) !== seller || listing.moderation_locked) {
             fail('Сделка приостановлена. Проверьте состояние объявления и аккаунтов.');
         }
-        if (action === 'accept' && deal.status === 'requested' && isSeller && listing.status === 'active') {
+        if (action === 'accept' && deal.status === 'requested' && isSeller && listing.status === 'active' && !listing.is_expired) {
             const [[reserved]] = await connection.execute('SELECT id FROM deals WHERE reserved_listing_id=? FOR UPDATE', [listing.id]);
             if (reserved) fail('Объявление уже зарезервировано.');
             await connection.execute("UPDATE deals SET status='accepted' WHERE id=?", [id]);
@@ -199,7 +202,8 @@ async function list(userId, side, requestedPage) {
                 dispute.id AS active_dispute_id,
                 buyer.name AS buyer_name,seller.name AS seller_name,
                 (buyer.status='active' AND seller.status='active' AND l.user_id=d.seller_id) AS parties_active,
-                r.rating AS review_rating, r.comment AS review_comment, r.hidden_at AS review_hidden_at,
+                r.rating AS review_rating, r.comment AS review_comment, r.moderation_status AS review_status,
+                r.moderation_reason AS review_reason,
                 (CURRENT_TIMESTAMP(3) < DATE_ADD(r.created_at, INTERVAL 7 DAY)) AS review_editable
          FROM deals d JOIN listings l ON l.id=d.listing_id
          JOIN users buyer ON buyer.id=d.buyer_id JOIN users seller ON seller.id=d.seller_id

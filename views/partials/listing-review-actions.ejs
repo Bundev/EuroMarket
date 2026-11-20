@@ -7,6 +7,6 @@
               placeholder="Обязательно при отклонении"></textarea>
     <div class="d-flex flex-wrap gap-2">
         <button class="btn btn-primary" name="mode" value="approve" <%= Number(item.moderation_locked) || item.seller_status !== 'active' ? 'disabled' : '' %>>Одобрить</button>
-        <button class="btn btn-outline-danger" name="mode" value="reject">Отклонить</button>
+        <button class="btn btn-outline-danger" name="mode" value="reject" data-confirm="Отклонить объявление?">Отклонить</button>
     </div>
 </form>

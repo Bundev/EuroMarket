@@ -118,13 +118,13 @@ async function run() {
         }
         for (const [format, buffer] of Object.entries(generated)) {
             const bargainingEnabled = format === 'jpeg' ? 1 : 0;
-            const fields = { item_condition: 'Like new', ...(bargainingEnabled ? { bargaining_enabled: '1' } : {}) };
+            const fields = { attr_condition: 'like_new', ...(bargainingEnabled ? { bargaining_enabled: '1' } : {}) };
             const response = await send('/listings', [photo(buffer, 'client.' + (format === 'jpeg' ? 'jpg' : format), 'image/' + format)], { fields });
             const id = Number(response.headers.get('location').split('=')[1]);
             const [[created]] = await pool.execute(
                 'SELECT title,description,price,currency,category_id,country_id,item_condition,bargaining_enabled FROM listings WHERE id=?', [id]);
             assert.deepEqual(created, { title: 'Image security ' + stamp, description: 'Fixture', price: '12.00',
-                currency: 'EUR', category_id: category, country_id: country, item_condition: 'Like new', bargaining_enabled: bargainingEnabled });
+                currency: 'EUR', category_id: category, country_id: country, item_condition: null, bargaining_enabled: bargainingEnabled });
             const [rows] = await pool.execute('SELECT image_path FROM listing_images WHERE listing_id=?', [id]);
             assert.match(rows[0].image_path, /^\/uploads\/listings\/[a-f0-9-]{36}\.webp$/);
             assert.equal((await fetch(base + rows[0].image_path)).status, 404);
@@ -137,14 +137,47 @@ async function run() {
                 const edit = await fetch(base + '/listings/' + id + '/edit', {
                     method: 'POST', headers: { cookie },
                     body: new URLSearchParams({ _csrf: token, title: created.title, description: 'Edited fixture',
-                        price: '13.45', country_id: country, category_id: category, item_condition: 'Used', bargaining_enabled: '0' }),
+                        price: '13.45', country_id: country, category_id: category, attr_condition: 'good', bargaining_enabled: '0' }),
                     redirect: 'manual'
                 });
                 assert.equal(edit.status, 302);
                 const [[edited]] = await pool.execute(
                     'SELECT title,description,price,currency,category_id,country_id,item_condition,bargaining_enabled FROM listings WHERE id=?', [id]);
-                assert.deepEqual(edited, { ...created, description: 'Edited fixture', price: '13.45', item_condition: 'Used', bargaining_enabled: 0 });
+                assert.deepEqual(edited, { ...created, description: 'Edited fixture', price: '13.45', item_condition: null, bargaining_enabled: 0 });
                 assert.deepEqual((await pool.execute('SELECT image_path FROM listing_images WHERE listing_id=?', [id]))[0], rows);
+                const [[revision]] = await pool.execute('SELECT review_version FROM listings WHERE id=?', [id]);
+                const [[original]] = await pool.execute('SELECT id FROM listing_images WHERE listing_id=?', [id]);
+                const editFields = { title: 'Editor atomic save', description: edited.description, price: edited.price,
+                    category_id: category, country_id: country, editor_version: revision.review_version,
+                    photo_order: 'new:0,id:' + original.id };
+                const editPath = '/listings/' + id + '/edit';
+                await send(editPath, [photo()], { fields: editFields, csrf: null, status: 403 });
+                await send(editPath, [photo()], { fields: { ...editFields, photo_order: 'id:4294967295,new:0' }, status: 409 });
+                await cleanTemps();
+                assert.deepEqual((await pool.execute('SELECT image_path FROM listing_images WHERE listing_id=?', [id]))[0], rows);
+                await send(editPath, [photo()], { fields: editFields });
+                const [ordered] = await pool.execute('SELECT id,image_path FROM listing_images WHERE listing_id=? ORDER BY sort_order,id', [id]);
+                assert.equal(ordered.length, 2);
+                assert.equal(ordered[1].id, original.id);
+                assert.notEqual(ordered[0].id, original.id);
+                await send(editPath, [photo()], { fields: editFields, status: 409 });
+                await cleanTemps();
+                assert.deepEqual((await pool.execute('SELECT id,image_path FROM listing_images WHERE listing_id=? ORDER BY sort_order,id', [id]))[0], ordered);
+                assert.equal((await pool.execute('SELECT title FROM listings WHERE id=?', [id]))[0][0].title, editFields.title);
+                const [[currentRevision]] = await pool.execute('SELECT review_version FROM listings WHERE id=?', [id]);
+                const removeFields = { ...editFields, editor_version: currentRevision.review_version,
+                    photo_order: 'id:' + ordered[0].id + ',remove:' + original.id };
+                await send(editPath, [], { fields: removeFields, csrf: null, status: 403 });
+                fault = 'commit-before';
+                await send(editPath, [], { fields: removeFields, status: 500 });
+                assert.deepEqual((await pool.execute('SELECT id,image_path FROM listing_images WHERE listing_id=? ORDER BY sort_order,id', [id]))[0], ordered);
+                assert.equal((await fetch(base + ordered[1].image_path, { headers: { cookie } })).status, 200);
+                await send(editPath, [], { fields: removeFields });
+                assert.deepEqual((await pool.execute('SELECT id,image_path FROM listing_images WHERE listing_id=? ORDER BY sort_order,id', [id]))[0], [ordered[0]]);
+                assert.equal((await fetch(base + ordered[1].image_path, { headers: { cookie } })).status, 404);
+                await cleanTemps();
+                checks.push('editor defers deletion until commit and preserves stored files on rollback');
+                checks.push('editor saves text and cover atomically, rejects stale and unauthorized multipart writes');
             }
             checks.push('valid ' + format);
         }
@@ -247,8 +280,9 @@ async function run() {
         assert.equal(Number((await pool.execute('SELECT COUNT(*) AS total FROM listing_images WHERE listing_id=?', [listing]))[0][0].total), addBefore);
         await cleanTemps(); checks.push('SQL error adding images preserves existing images');
         await send('/listings/4294967295/images', [photo()], { status: 404 }); await cleanTemps(); checks.push('unavailable listing upload cleanup');
-        // Existing count is one; concurrent requests cannot both take nine places.
-        const results = await Promise.all([send('/listings/' + listing + '/images', Array.from({ length: 9 }, () => photo()), { status: [302, 400] }), send('/listings/' + listing + '/images', Array.from({ length: 9 }, () => photo()), { status: [302, 400] })]);
+        // Concurrent requests cannot both fill the remaining photo slots.
+        const fill = () => send('/listings/' + listing + '/images', Array.from({ length: 10 - addBefore }, () => photo()), { status: [302, 400] });
+        const results = await Promise.all([fill(), fill()]);
         // Scheduling may reverse which request succeeds; verify outcomes and DB directly.
         assert.equal(Number((await pool.execute('SELECT COUNT(*) AS total FROM listing_images WHERE listing_id=?', [listing]))[0][0].total), 10);
         assert.deepEqual(results.map(result => result.status).sort(), [302, 400]);

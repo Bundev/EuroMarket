@@ -39,7 +39,10 @@ async function verifyPassword(password, passwordHash) {
 }
 
 async function findPublicById(id) {
-    const [[user]] = await db.execute("SELECT id, name, created_at FROM users WHERE id=? AND status='active'", [id]);
+    const [[user]] = await db.execute(
+        `SELECT id,name,created_at,phone_verified_at IS NOT NULL AS phone_verified,
+                (SELECT COUNT(*) FROM deals d WHERE d.seller_id=users.id AND d.status='completed') AS completed_deals
+         FROM users WHERE id=? AND status='active'`, [id]);
     return user;
 }
 
@@ -58,8 +61,7 @@ async function updateName(userId, name) {
 }
 
 async function updatePhone(userId, phone, phonePublic) {
-    await db.execute(
-        "UPDATE users SET phone = ?, phone_public = ? WHERE id = ? AND status = 'active'",
-        [phone, phonePublic, userId]
-    );
+    const [result] = await db.execute("UPDATE users SET phone=?,phone_public=? WHERE id=? AND status='active'",
+        [phone, phonePublic, userId]);
+    return result.affectedRows > 0;
 }

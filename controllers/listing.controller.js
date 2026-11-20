@@ -13,30 +13,34 @@ const { isFollowing } = require('../models/follow.model');
 const recentlyViewed = require('../models/recentlyViewed.model');
 const recommendations = require('../models/recommendation.model');
 const marketplaceTools = require('../models/marketplaceTools.model');
+const attributeDefinitions = require('../services/listingAttributes');
+const attributes = require('../models/listingAttributes.model');
 
-function itemCondition(value) {
-    if (value === undefined) return undefined;
-    if (typeof value !== 'string' || value.trim().length > 80) {
-        throw Object.assign(new Error('Укажите состояние товара длиной до 80 символов.'), { status: 400 });
-    }
-    return value.trim() || null;
+async function parseAttributes(categoryId, input) {
+    const fields = attributeDefinitions.fieldsFor(categoryId, await getAllCategories());
+    try { return attributeDefinitions.listingValues(fields, input); }
+    catch (error) { throw Object.assign(error, { status: 400 }); }
 }
+
 const seo = require('../services/seo');
-const { getAllCategories, getCategoryNavigation } = require('../models/category.model');
+const { getAllCategories, getCategoryAncestors, isServiceCategory } = require('../models/category.model');
+const breadcrumbs = require('../services/breadcrumbs');
 
 function uploadResult(req, res, redirect) {
     return req.get('Accept') === 'application/json' ? res.json({ redirect }) : res.redirect(redirect);
 }
 
+function editorError(req, res, status, message, field) {
+    return req.get('Accept') === 'application/json'
+        ? res.status(status).json({ error: message, field })
+        : res.status(status).send(message);
+}
+
 // Страница создания объявления
 async function createPage(req, res) {
+    res.set('Cache-Control', 'private, no-store');
     try {
-        const [categories] = await db.execute(
-            `SELECT id, name
-             FROM categories
-             WHERE is_active = 1
-             ORDER BY name`
-        );
+        const categories = (await getAllCategories()).sort((a, b) => a.name.localeCompare(b.name));
 
         const [countries] = await db.execute(
             `SELECT id, code, name, currency
@@ -47,6 +51,7 @@ async function createPage(req, res) {
 
         res.render('pages/listing-create', {
             categories,
+            attributeGroups: attributeDefinitions.groups(categories),
             countries,
             error: null
         });
@@ -111,7 +116,7 @@ async function store(req, res) {
 
         if (cityId !== null) {
             if (!Number.isSafeInteger(cityId) || cityId <= 0) {
-                return res.status(400).send('Некорректный город');
+                return editorError(req, res, 400, 'Некорректный город', 'city_id');
             }
 
             const [cities] = await db.execute(
@@ -125,23 +130,24 @@ async function store(req, res) {
             );
 
             if (!cities.length) {
-                return res.status(400).send('Город не принадлежит выбранной стране');
+                return editorError(req, res, 400, 'Город не принадлежит выбранной стране', 'city_id');
             }
         }
 
-        const imagePaths = await images.prepare(req);
+        const attributeValues = await parseAttributes(categoryId, req.body);
+        const imagePaths = req.imageUpload ? await images.prepare(req) : [];
         const listingId = await transaction(async connection => {
             const [users] = await connection.execute("SELECT id FROM users WHERE id=? AND status='active' FOR UPDATE", [req.session.user.id]);
             if (!users.length) throw Object.assign(new Error('Аккаунт недоступен.'), { status: 403 });
             const id = await listingModel.createListing({
                 userId: req.session.user.id, categoryId, countryId, cityId,
                 title: title.trim(), description: description.trim(), price: priceNumber,
-                itemCondition: itemCondition(req.body.item_condition),
                 bargainingEnabled: req.body.bargaining_enabled === '1',
-                currency: rows[0].currency
+                currency: rows[0].currency,
+                attributes: attributeValues
             }, connection);
             await listingImageModel.addImages(id, imagePaths, 0, connection);
-            await images.publish(req);
+            if (req.imageUpload) await images.publish(req);
             return id;
         });
         committed = true;
@@ -152,7 +158,7 @@ async function store(req, res) {
 
     } catch (error) {
         logError('Ошибка создания объявления:', error);
-        if ([400, 403, 404].includes(error.status)) return res.status(error.status).send(error.message);
+        if ([400, 403, 404].includes(error.status)) return editorError(req, res, error.status, error.message, error.field);
         res.status(error.status === 503 ? 503 : 500).send('Не удалось сохранить объявление.');
     } finally {
         await images.dispose(req, committed);
@@ -179,7 +185,7 @@ async function show(req, res) {
             return res.status(404).send('Объявление не найдено');
         }
 
-        const isPublic = listing.status === 'active' && !listing.moderation_locked && listing.seller_status === 'active';
+        const isPublic = listing.status === 'active' && !listing.is_expired && !listing.moderation_locked && listing.seller_status === 'active';
         if (
             !isPublic &&
             Number(currentUserId) !== Number(listing.user_id) &&
@@ -199,15 +205,13 @@ async function show(req, res) {
         const images = await listingImageModel.getImagesByListingId(
             listing.id
         );
-        const categories = await getAllCategories();
+        const categories = await getAllCategories({ includeInactive: true });
         const category = categories.find(item => Number(item.id) === Number(listing.category_id));
-        const trail = [
-            { name: 'Главная', path: '/' },
-            ...(category ? getCategoryNavigation(category, categories).breadcrumbs.map(item => (
-                { name: item.name, path: seo.categoryPath(item.slug) }
-            )) : []),
-            { name: listing.title, path }
-        ];
+        const ancestors = category ? getCategoryAncestors(category, categories) : [];
+        const isService = isServiceCategory(ancestors);
+        res.locals.pageBreadcrumbs = breadcrumbs.trail(
+            ...ancestors.filter(item => item.is_active).map(item => ({ name: item.name, path: seo.categoryPath(item.slug) })),
+            { name: listing.title, path });
         if (isPublic) {
             const name = seo.plain(listing.title, 100) || 'Объявление №' + listing.id;
             const place = seo.plain(listing.country_name, 35);
@@ -226,13 +230,12 @@ async function show(req, res) {
             }
             seo.apply(res, {
                 path, title: `${name} · ${place} · №${listing.id} — EuroMarket`, description, image: allowedImages[0],
-                structured: { '@context': 'https://schema.org', '@graph': [product,
-                    seo.breadcrumbs(res, trail.map((item, i) => i === trail.length - 1 ? { ...item, name } : item))] }
+                structured: { '@context': 'https://schema.org', '@graph': [product] }
             });
         }
 
         const canFollowSeller = isPublic && Number(currentUserId) !== Number(listing.user_id);
-        const canOfferPrice = Boolean(currentUserId && isPublic &&
+        const canOfferPrice = Boolean(!isService && currentUserId && isPublic &&
             Number(currentUserId) !== Number(listing.user_id) && listing.bargaining_enabled && !listing.reserved);
         const sellerFollow = canFollowSeller ? {
             following: currentUserId ? await isFollowing(listing.user_id, currentUserId) : false
@@ -244,9 +247,10 @@ async function show(req, res) {
 
         res.render('pages/listing-show', {
             listing,
+            characteristics: attributes.formatted((await attributes.load([listing.id], db, isPublic)).get(listing.id), listing.item_condition),
             images,
-            trail,
-            purchaseRequestKey: currentUserId && listing.status === 'active' &&
+            isService,
+            purchaseRequestKey: !isService && currentUserId && isPublic &&
                 Number(currentUserId) !== Number(listing.user_id) ? require('node:crypto').randomUUID() : null,
             reviewKey: req.session.user?.role === 'admin' && listing.status === 'pending_review'
                 ? require('node:crypto').randomUUID() : null,
@@ -274,6 +278,7 @@ async function show(req, res) {
 
 // Страница редактирования объявления
 async function editPage(req, res) {
+    res.set('Cache-Control', 'private, no-store');
     try {
         const listingId = Number(req.params.id);
 
@@ -291,12 +296,7 @@ async function editPage(req, res) {
             return res.status(404).send('Объявление не найдено');
         }
 
-        const [categories] = await db.execute(
-            `SELECT id, name
-             FROM categories
-             WHERE is_active = 1
-             ORDER BY name`
-        );
+        const categories = (await getAllCategories()).sort((a, b) => a.name.localeCompare(b.name));
         const images = await listingImageModel.getImagesByListingId(
             listingId
         );
@@ -309,6 +309,8 @@ async function editPage(req, res) {
         res.render('pages/listing-edit', {
             listing,
             categories,
+            attributeGroups: attributeDefinitions.groups(categories),
+            attributeValues: (await attributes.load([listingId])).get(listingId) || new Map(),
             images,
             countries,
             error: null
@@ -322,6 +324,9 @@ async function editPage(req, res) {
 
 // Сохранение изменений
 async function update(req, res) {
+    let stage = 'validation';
+    let committed = false;
+    const deletions = [];
     try {
         const listingId = Number(req.params.id);
         const userId = req.session.user.id;
@@ -330,8 +335,11 @@ async function update(req, res) {
             title,
             description,
             category_id,
-            price
-        } = req.body;
+            price,
+            bargaining_enabled: bargainingEnabled,
+            editor_version: editorVersion,
+            photo_order: photoOrder
+        } = req.body ?? {};
 
         const categoryId = Number(category_id);
         const priceNumber = Number(price);
@@ -348,13 +356,18 @@ async function update(req, res) {
             categoryId <= 0 ||
             !Number.isFinite(priceNumber) ||
             priceNumber < 0 ||
-            priceNumber > 9999999999.99
+            priceNumber > 9999999999.99 ||
+            (bargainingEnabled !== undefined && !['0', '1'].includes(bargainingEnabled)) ||
+            (editorVersion !== undefined && (typeof editorVersion !== 'string' || !/^\d{1,10}$/.test(editorVersion))) ||
+            (photoOrder !== undefined && (typeof photoOrder !== 'string' || photoOrder.length > 280 ||
+                (photoOrder !== '' && !/^(?:(?:id|remove):\d{1,10}|new:\d)(?:,(?:(?:id|remove):\d{1,10}|new:\d))*$/.test(photoOrder))))
         ) {
             return res.status(400).send(
                 'Проверьте введённые данные'
             );
         }
 
+        stage = 'category';
         const [categories] = await db.execute(
             `SELECT id FROM categories
              WHERE id = ? AND is_active = 1`,
@@ -375,9 +388,10 @@ async function update(req, res) {
             : null;
 
         if (!Number.isSafeInteger(countryId) || countryId <= 0) {
-            return res.status(400).send('Некорректная страна');
+            return editorError(req, res, 400, 'Некорректная страна', 'country_id');
         }
 
+        stage = 'country-currency';
         const [validCountries] = await db.execute(
             `SELECT id, currency
             FROM countries
@@ -387,14 +401,15 @@ async function update(req, res) {
         );
 
         if (!validCountries.length) {
-            return res.status(400).send('Страна не найдена');
+            return editorError(req, res, 400, 'Страна не найдена', 'country_id');
         }
 
         if (cityId !== null) {
             if (!Number.isSafeInteger(cityId) || cityId <= 0) {
-                return res.status(400).send('Некорректный город');
+                return editorError(req, res, 400, 'Некорректный город', 'city_id');
             }
 
+            stage = 'city';
             const [validCities] = await db.execute(
                 `SELECT id
                 FROM cities
@@ -413,30 +428,45 @@ async function update(req, res) {
         }
 
 
+        stage = 'attributes';
+        const attributeValues = await parseAttributes(categoryId, req.body);
+        stage = 'photos';
+        const photoPaths = req.files?.length ? await images.prepare(req) : [];
+        stage = 'listing-transaction';
         const { pending } = await listingModel.updateListing(
             listingId,
             userId,
             {
                 title: title.trim(),
                 description: description.trim(),
-                itemCondition: itemCondition(req.body.item_condition),
-                bargainingEnabled: req.body.bargaining_enabled === undefined ? undefined : req.body.bargaining_enabled === '1',
+                bargainingEnabled: bargainingEnabled === undefined ? undefined : bargainingEnabled === '1',
                 categoryId,
                 countryId,
                 cityId,
                 price: priceNumber,
-                currency: validCountries[0].currency
+                currency: validCountries[0].currency,
+                attributes: attributeValues,
+                editorVersion: editorVersion === undefined ? undefined : Number(editorVersion),
+                photoPaths,
+                photoOrder: photoOrder === undefined ? undefined : photoOrder ? photoOrder.split(',') : [],
+                publishPhotos: () => images.publish(req),
+                stagePhotoDeletion: async path => { deletions.push(await images.queueDeletion(path)); }
             }
         );
 
+        stage = 'response';
+        committed = true;
         flash(req, 'success', pending ? 'Объявление отправлено на проверку.' : 'Изменения объявления сохранены.');
 
-        res.redirect(`/listings/${listingId}`);
+        return uploadResult(req, res, req.get('Accept') === 'application/json' ? `/listings/${listingId}/edit` : `/listings/${listingId}`);
 
     } catch (error) {
-        if ([400, 403, 404, 409].includes(error.status)) return res.status(error.status).send(error.message);
-        logError('Ошибка обновления объявления:', error);
+        if ([400, 403, 404, 409, 503].includes(error.status)) return editorError(req, res, error.status, error.message, error.field);
+        logError('Ошибка обновления объявления:', error, { file: 'controllers/listing.controller.js', stage });
         res.status(500).send('Ошибка сервера');
+    } finally {
+        if (req.imageUpload) await images.dispose(req, committed);
+        for (const name of deletions) await images.finishDeletion(name).catch(error => logError('IMAGE_DELETE_DEFERRED', error));
     }
 }
 

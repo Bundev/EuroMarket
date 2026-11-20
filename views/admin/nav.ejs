@@ -1,8 +1,11 @@
-<nav class="nav nav-pills flex-wrap gap-2 mb-4" aria-label="Административная навигация">
-    <% for (const [path, title] of [['dashboard','Обзор'],['users','Пользователи'],['listings','Объявления'],['moderation','Модерация'],['reports','Жалобы'],['disputes','Споры'],['reviews','Отзывы'],['logs','Журнал']]) { %>
-        <a href="<%= path === 'dashboard' ? '/admin' : '/admin/' + path %>" class="nav-link <%= section === path ? 'active' : '' %>">
-            <%= title %><% if (path === 'moderation') { %> <span class="badge bg-secondary" aria-label="На проверке"><%= typeof pendingModerationCount === 'undefined' ? 0 : pendingModerationCount %></span><% } %>
-            <% if (path === 'disputes') { %><span class="badge bg-secondary" data-open-disputes><%= typeof openDisputeCount === 'undefined' ? 0 : openDisputeCount %><span class="visually-hidden"> открыто</span></span><% } %>
-        </a>
-    <% } %>
+<nav class="admin-tabs mb-4" aria-label="Административная навигация">
+<% for (const [path,title,measure,attention] of [
+['dashboard','Обзор','Задачи, требующие внимания',true],['users','Пользователи','Всего пользователей'],
+['listings','Объявления','Всего объявлений'],['moderation','Модерация','На проверке',true],
+['reports','Жалобы','Открытые жалобы',true],['disputes','Споры','Открытые споры',true],
+['reviews','Отзывы','На проверке',true],['logs','Журнал','Всего записей']]) { %>
+    <a href="<%= path === 'dashboard' ? '/admin' : '/admin/' + path %>" class="admin-tab<%= section === path ? ' is-current' : '' %>" <% if (section === path) { %>aria-current="page"<% } %>>
+        <%= title %> <span class="badge rounded-pill <%= attention && adminCounts[path] ? 'text-bg-warning' : 'text-bg-light' %>" data-admin-count="<%= path %>" title="<%= measure %>"><%= adminCounts[path] %><span class="visually-hidden"> <%= measure %></span></span>
+    </a>
+<% } %>
 </nav>

@@ -29,6 +29,7 @@ async function show(req, res) {
         follows.summary(sellerId, req.session.user?.id)
     ]);
     const profilePath = seo.sellerProfilePath(sellerId);
+    res.locals.pageBreadcrumbs = require('../services/breadcrumbs').trail({ name: seller.name, path: profilePath });
     const pageLabel = catalog.page > 1 ? ' · страница ' + catalog.page : '';
     const label = seo.plain(seller.name, 72);
     const sellerLabel = label ? label + ' · продавец №' + sellerId : 'Продавец №' + sellerId;
@@ -47,7 +48,8 @@ async function show(req, res) {
         : profilePath + '?' + new URLSearchParams(page === 1 ? { sort } : { sort, page });
     res.render('pages/seller-profile', {
         seller, rating, follow, ...catalog, sorts, sort, profilePath, linkTo,
-        reviewsPath: seo.sellerPath(sellerId), listingPath: seo.listingPath
+        reviewsPath: seo.sellerPath(sellerId), listingPath: seo.listingPath,
+        reportReasons: require('../models/sellerReport.model').reasons
     });
 }
 

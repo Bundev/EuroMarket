@@ -14,12 +14,15 @@
             <div class="seller-avatar" aria-hidden="true"><%= seller.name.charAt(0).toUpperCase() %></div>
             <div class="text-break">
                 <h1 class="h3 mb-1" id="seller-name"><%= seller.name %></h1>
+                <%- include('../partials/verified-phone', { verified: seller.phone_verified }) %>
+                <% if (!seller.phone_verified) { %><p class="small text-muted mb-1">Телефон не подтверждён</p><% } %>
                 <p class="text-muted mb-2">На EuroMarket с <%= seller.created_at.toLocaleDateString('ru-RU') %></p>
                 <div class="seller-rating-row">
                     <%- include('../partials/seller-rating', { rating }) %>
                     <a href="<%= reviewsPath %>">Все отзывы</a>
                 </div>
                 <p class="text-muted small mt-2 mb-0">Подписчиков: <span data-follower-count aria-live="polite"><%= follow.total %></span></p>
+                <p class="small text-muted mb-0">Завершённых сделок: <%= seller.completed_deals %></p>
                 <% if (!user || Number(user.id) !== Number(seller.id)) { %>
                     <div class="mt-3">
                         <% if (user) { %>
@@ -31,6 +34,21 @@
                 <% } %>
             </div>
         </div>
+        <% if (user && Number(user.id) !== Number(seller.id)) { %>
+            <details class="mt-3">
+                <summary>Пожаловаться на продавца</summary>
+                <form action="/users/<%= seller.id %>/report" method="post" class="mt-2">
+                    <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                    <label class="form-label" for="seller-report-reason">Причина</label>
+                    <select id="seller-report-reason" class="form-select mb-2" name="reason" required>
+                        <% for (const [value, label] of Object.entries(reportReasons)) { %><option value="<%= value %>"><%= label %></option><% } %>
+                    </select>
+                    <label class="form-label" for="seller-report-comment">Комментарий</label>
+                    <textarea id="seller-report-comment" class="form-control mb-2" name="comment" maxlength="1000" rows="3"></textarea>
+                    <button class="btn btn-outline-danger">Отправить жалобу</button>
+                </form>
+            </details>
+        <% } else if (!user) { %><a class="mt-3" href="/login">Войти, чтобы пожаловаться на продавца</a><% } %>
     </section>
 
     <section aria-labelledby="seller-listings">

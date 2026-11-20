@@ -1,0 +1,2 @@
+ALTER TABLE saved_searches ADD COLUMN IF NOT EXISTS attribute_query TEXT NULL;
+ALTER TABLE saved_searches ADD COLUMN IF NOT EXISTS sort_order VARCHAR(16) NOT NULL DEFAULT 'newest';

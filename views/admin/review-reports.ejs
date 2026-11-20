@@ -4,18 +4,30 @@
 <body class="bg-light">
 <%- include('../partials/toasts') %>
 <%- include('../partials/header') %>
-<main class="container py-4 review-page">
-    <%- include('nav', { section: 'reviews' }) %>
-    <h1 class="h3">Жалобы на отзыв</h1>
-    <% if (!reports.length) { %><p>Жалоб пока нет.</p><% } %>
+<main class="container py-4 admin-page">
+    <%- include('nav', { section: 'reports' }) %>
+    <h1 class="h3 mb-3">Жалобы на отзыв</h1>
+    <%- include('report-nav', { reportType: 'reviewReports' }) %>
+    <p><a href="/admin/reviews/<%= dealId %>">Открыть отзыв №<%= dealId %> для модерации</a></p>
+    <% if (!reports.length) { %><p class="admin-record">Жалоб пока нет.</p><% } %>
     <% for (const report of reports) { %>
-        <article class="card card-body mb-3">
+        <article class="admin-record mb-3">
             <h2 class="h6"><%= report.author %></h2>
             <p class="small text-muted"><%= new Date(report.created_at).toLocaleDateString('ru-RU') %> · <%= report.resolved_at ? 'Закрыта' : 'Открыта' %></p>
             <p class="review-comment mb-0"><%= report.reason %></p>
         </article>
     <% } %>
-    <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => '/admin/reviews/' + dealId + '/reports?page=' + value }) %>
+    <% if (openCount) { %>
+        <form class="admin-record mb-3" method="post" action="/admin/reports/reviews/<%= dealId %>">
+            <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+            <input type="hidden" name="version" value="<%= review.moderation_version %>">
+            <input type="hidden" name="request_key" value="<%= requestKey() %>">
+            <label class="form-label" for="dismiss-reason">Причина закрытия</label>
+            <textarea id="dismiss-reason" name="reason" class="form-control mb-2" required maxlength="500" rows="2"></textarea>
+            <button class="btn btn-outline-danger" name="mode" value="dismiss" data-confirm="Закрыть открытые жалобы на этот отзыв?">Закрыть жалобы</button>
+        </form>
+    <% } %>
+    <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => '/admin/reports/reviews/' + dealId + '?page=' + value }) %>
 </main>
 </body>
 </html>

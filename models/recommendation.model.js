@@ -1,6 +1,12 @@
 const db = require('../config/db');
+const { matchesSavedAttributes, validatedSearches } = require('./attributeMatch');
+const { SEARCH_SORTS } = require('./listing.model');
 
-const visible = "l.status='active' AND l.moderation_locked=0 AND seller.status='active'";
+const preferredFields = "'car_brand','car_model','car_year','car_mileage','car_fuel','device_brand','device_model','device_storage','condition','property_type','property_area','property_rooms'";
+const sameValue = `((a.text_value IS NOT NULL AND BINARY a.text_value=BINARY p.text_value) OR
+    (a.number_value IS NOT NULL AND a.number_value=p.number_value))`;
+
+const visible = "l.status='active' AND (l.expires_at IS NULL OR l.expires_at>UTC_TIMESTAMP(3)) AND l.moderation_locked=0 AND seller.status='active'";
 const newest = 'l.created_at DESC, l.id DESC';
 // Cold start: recent listings first, then number of favorites, then newest.
 const popular = "(l.created_at >= CURRENT_DATE - INTERVAL 30 DAY) DESC, (SELECT COUNT(*) FROM favorites f WHERE f.listing_id=l.id) DESC";
@@ -15,8 +21,13 @@ const interests = `WITH RECURSIVE signals AS (
     FROM signals s JOIN listings l ON l.id=s.listing_id JOIN users seller ON seller.id=l.user_id
     WHERE ${visible}
     GROUP BY l.category_id, l.currency
+), preference_attributes AS (
+    SELECT DISTINCT l.category_id,a.field_key,a.text_value,a.number_value
+    FROM signals s JOIN listings l ON l.id=s.listing_id JOIN users seller ON seller.id=l.user_id
+    JOIN listing_attributes a ON a.listing_id=l.id
+    WHERE ${visible} AND a.field_key IN (${preferredFields})
 ), searches AS (
-    SELECT id,category_id,country_id,city_id,currency,min_price,max_price,query_text
+    SELECT id,category_id,country_id,city_id,currency,min_price,max_price,query_text,attribute_query
     FROM saved_searches WHERE user_id=?
 ),
 search_categories(search_id, category_id) AS (
@@ -28,6 +39,9 @@ search_categories(search_id, category_id) AS (
 const relevance = `COALESCE((SELECT MAX(p.weight +
     CASE WHEN p.currency=l.currency AND ABS(l.price-p.target_price)<=p.target_price*0.25 THEN 2 ELSE 0 END)
     FROM preferences p WHERE p.category_id=l.category_id),0)
+    + LEAST(3, (SELECT COUNT(DISTINCT a.field_key) FROM listing_attributes a
+        JOIN preference_attributes p ON p.category_id=l.category_id AND p.field_key=a.field_key
+        WHERE a.listing_id=l.id AND ${sameValue}))
     + 8 * EXISTS (SELECT 1 FROM searches s
         WHERE (s.country_id IS NULL OR s.country_id=l.country_id)
           AND (s.city_id IS NULL OR s.city_id=l.city_id)
@@ -37,7 +51,8 @@ const relevance = `COALESCE((SELECT MAX(p.weight +
           AND (s.min_price IS NULL OR (s.currency=l.currency AND l.price>=s.min_price))
           AND (s.max_price IS NULL OR (s.currency=l.currency AND l.price<=s.max_price))
           AND (s.query_text='' OR l.title LIKE CONCAT('%',s.query_text,'%')
-                               OR l.description LIKE CONCAT('%',s.query_text,'%')))`;
+                               OR l.description LIKE CONCAT('%',s.query_text,'%'))
+          AND ${matchesSavedAttributes})`;
 
 async function recommendations({ userId, countryId, historyEnabled, similar, previewSize, sort, requestedPage }) {
     const filters = [visible], params = [];
@@ -57,17 +72,24 @@ async function recommendations({ userId, countryId, historyEnabled, similar, pre
         totalPages = Math.ceil(total / limit);
         if (Number.isSafeInteger(requestedPage) && requestedPage > 0) page = Math.min(requestedPage, totalPages || 1);
     }
-    let prefix = '', order = newest;
+    let prefix = '', order = SEARCH_SORTS.newest;
     const prefixParams = [], orderParams = [];
     if (similar) {
-        order = `(l.country_id=?) DESC, (l.currency=?) DESC,
+        order = `(SELECT COUNT(*) FROM listing_attributes a JOIN listing_attributes p ON p.listing_id=? AND p.field_key=a.field_key
+            WHERE a.listing_id=l.id AND ${sameValue}) DESC,
+                 (l.country_id=?) DESC, (l.currency=?) DESC,
                  CASE WHEN l.currency=? THEN ABS(l.price-?) END ASC, ${newest}`;
-        orderParams.push(similar.country_id, similar.currency, similar.currency, similar.price);
+        orderParams.push(similar.id, similar.country_id, similar.currency, similar.currency, similar.price);
     } else if (sort !== 'newest') {
         order = popular + ', ' + newest;
         if (userId) {
             prefix = interests;
             prefixParams.push(userId, userId, Number(Boolean(historyEnabled)), userId);
+            const [structured] = await db.execute(
+                'SELECT CAST(id AS CHAR) AS id,category_id,attribute_query FROM saved_searches WHERE user_id=? AND attribute_query IS NOT NULL', [userId]);
+            const [categories] = structured.length ? await db.query(
+                'SELECT id,parent_id,slug FROM categories WHERE is_active=1') : [[]];
+            orderParams.push(validatedSearches(structured, categories));
             order = relevance + ' DESC, ' + order;
         }
     }

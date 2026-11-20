@@ -5,30 +5,77 @@
 <%- include('../partials/toasts') %>
 <%- include('../partials/header') %>
 <main class="container py-4" data-compare-page>
-    <h1 class="h3">Сравнение объявлений</h1>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <h1 class="h3 mb-0">Сравнение объявлений</h1>
+        <span class="badge rounded-pill text-bg-primary"><%= listings.length %> из 4</span>
+        <% if (listings.length) { %>
+            <button type="button" class="btn btn-outline-secondary btn-sm ms-md-auto" data-compare-clear>Очистить сравнение</button>
+        <% } %>
+    </div>
     <% if (!listings.length) { %>
-        <p><%= hasSelection ? 'Выбранные объявления больше недоступны.' : 'Выберите до четырёх объявлений для сравнения.' %></p>
-        <a href="/search">Перейти к объявлениям</a>
+        <section class="card border-0 rounded-4 shadow-sm p-4 p-md-5 text-center">
+            <h2 class="h5"><%= hasSelection ? 'Выбранные объявления недоступны' : 'Список сравнения пуст' %></h2>
+            <p class="text-muted">Добавьте до четырёх объявлений, чтобы сравнить их в одной таблице.</p>
+            <div><a class="btn btn-primary" href="/search">Вернуться к поиску</a></div>
+        </section>
     <% } else { %>
         <% if (new Set(listings.map(item => item.currency)).size > 1) { %>
             <p>Цены указаны в исходных валютах без пересчёта.</p>
         <% } %>
-        <div class="row row-cols-1 row-cols-sm-2 row-cols-xl-4 g-3">
-            <% for (const item of listings) { %>
-                <div class="col">
-                    <article class="card card-body h-100 text-break">
-                        <h2 class="h5"><a href="<%= listingPath(item) %>"><%= item.title %></a></h2>
-                        <dl>
-                            <dt>Цена</dt><dd><%= Number(item.price).toLocaleString('ru-RU') %> <%= item.currency %></dd>
-                            <dt>Состояние товара</dt><dd><%= item.item_condition || 'Не указано' %></dd>
-                            <dt>Местоположение</dt><dd><%= [item.city, item.country].filter(Boolean).join(', ') %></dd>
-                            <dt>Категория</dt><dd><%= item.category %></dd>
-                            <dt>Характеристики</dt><dd class="compare-description"><%= item.description %></dd>
-                        </dl>
-                        <button class="btn btn-outline-secondary mt-auto" type="button" data-remove-comparison="<%= item.id %>">Убрать из сравнения</button>
-                    </article>
-                </div>
-            <% } %>
+        <% if (new Set(listings.map(item => item.category_id)).size > 1) { %>
+            <p class="text-muted">Товары из разных категорий сопоставимы только по общим полям.</p>
+        <% } %>
+        <% if (listings.length > 1) { %>
+            <label class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" data-compare-differences>
+                <span class="form-check-label">Показывать только различия</span>
+            </label>
+        <% } %>
+        <% const fields = new Map(listings.flatMap(item => item.characteristics.map(field => [field.key, field.label])));
+        const rows = [
+            ['Цена', item => Number(item.price).toLocaleString('ru-RU') + ' ' + item.currency],
+            ['Местоположение', item => [item.city, item.country].filter(Boolean).join(', ')],
+            ['Категория', item => item.category]
+        ];
+        for (const [key, label] of fields) rows.push([label, item => item.characteristics.find(field => field.key === key)?.value]); %>
+        <p class="alert alert-light border" data-compare-no-differences hidden>Различий в указанных данных нет.</p>
+        <div class="compare-table-scroll shadow-sm rounded-4" tabindex="0" role="region" aria-label="Таблица сравнения. На узких экранах прокручивается по горизонтали">
+            <table class="compare-table">
+                <caption class="visually-hidden">Сравнение характеристик выбранных объявлений</caption>
+                <thead>
+                    <tr>
+                        <th scope="col" class="compare-row-label">Характеристика</th>
+                        <% for (const item of listings) { %>
+                            <th scope="col">
+                                <div class="compare-image">
+                                    <% if (item.main_image) { %><img src="<%= item.main_image %>" alt="" loading="lazy">
+                                    <% } else { %><span>Нет фото</span><% } %>
+                                </div>
+                                <div class="mt-2"><%= item.title %></div>
+                                <div class="text-primary fs-5 my-1"><%= rows[0][1](item) %></div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <a class="btn btn-sm btn-outline-primary" href="<%= listingPath(item) %>">К объявлению</a>
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" data-remove-comparison="<%= item.id %>"
+                                            aria-label="Убрать из сравнения: <%= item.title %>">Убрать</button>
+                                </div>
+                            </th>
+                        <% } %>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% for (const [label, value] of rows) {
+                        const values = listings.map(value);
+                        const differs = new Set(values).size > 1;
+                    %>
+                        <tr <% if (differs) { %>class="compare-difference"<% } else { %>data-compare-same<% } %>>
+                            <th scope="row" class="compare-row-label"><%= label %>
+                                <% if (differs) { %><span class="compare-difference-label">Различается</span><% } %>
+                            </th>
+                            <% for (const text of values) { %><td class="compare-description"><%= text ?? 'Не указано' %></td><% } %>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
         </div>
     <% } %>
 </main>

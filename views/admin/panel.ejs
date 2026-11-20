@@ -35,6 +35,8 @@
             </form>
         <% } %>
         <% if (section === 'reports') { %>
+            <h2 class="h4">Жалобы на объявления</h2>
+            <%- include('report-nav', { reportType: 'listingReports' }) %>
             <form method="GET" action="/admin/reports" class="d-flex gap-2 mb-3">
                 <label for="reportStatus" class="visually-hidden">Статус жалобы</label>
                 <select name="status" id="reportStatus" class="form-select"><option value="">Все жалобы</option><% ['open','accepted','rejected'].forEach(status => { %><option <%= data.status === status ? 'selected' : '' %>><%= status %></option><% }) %></select>
@@ -45,7 +47,7 @@
         <% if (!data.items.length) { %><p>Записей не найдено.</p><% } %>
         <div class="d-grid gap-3">
         <% data.items.forEach(item => { %>
-            <article class="card p-3">
+            <article class="admin-record">
                 <% if (section === 'users') { %>
                     <a href="/admin/users/<%= item.id %>" class="fw-semibold"><%= item.name %></a>
                     <span><%= item.email %></span><small>Роль: <%= item.role %> · Статус: <%= item.status %></small>
@@ -64,7 +66,9 @@
                         </form>
                     <% } %>
                 <% } else if (section === 'reports') { %>
-                    <strong>Жалоба № <%= item.id %> · <%= data.reasons[item.reason] %> · <%= item.status %></strong>
+                    <div class="d-flex flex-wrap gap-2 justify-content-between"><strong>Жалоба № <%= item.id %> · <%= data.reasons[item.reason] %></strong>
+                        <%- include('status', { tone: {open:'warning',accepted:'success',rejected:'danger'}[item.status],
+                            label: {open:'Открыта',accepted:'Принята',rejected:'Отклонена'}[item.status] }) %></div>
                     <p><%= item.author_name || 'Пользователь недоступен' %> — <%= item.listing_title || 'Объявление недоступно' %></p>
                     <p class="admin-comment"><%= item.comment %></p>
                     <% if (item.listing_id) { %><a href="/admin/listings?search=<%= encodeURIComponent(item.listing_title || '') %>">Управление объявлением</a><% } %>
@@ -77,7 +81,7 @@
                             <select name="status" id="decision<%= item.id %>" class="form-select mb-2"><option value="accepted">Принять</option><option value="rejected">Отклонить</option></select>
                             <label for="reportReason<%= item.id %>" class="form-label">Обоснование решения</label>
                             <textarea name="reason" id="reportReason<%= item.id %>" class="form-control mb-2" rows="2" maxlength="500" required></textarea>
-                            <button class="btn btn-primary">Сохранить решение</button>
+                            <button class="btn btn-primary" data-confirm="Сохранить решение по жалобе?">Сохранить решение</button>
                         </form>
                     <% } else { %><p>Решение: <%= item.review_reason %></p><% } %>
                 <% } else { %>
@@ -90,10 +94,6 @@
             </article>
         <% }) %>
         </div>
-        <nav class="d-flex justify-content-between mt-3" aria-label="Страницы административной панели">
-            <% if (data.page > 1) { %><a href="<%= pageUrl(data.page - 1) %>">Назад</a><% } %>
-            <span><%= data.page %> / <%= data.pages %></span>
-            <% if (data.page < data.pages) { %><a href="<%= pageUrl(data.page + 1) %>">Вперёд</a><% } %>
-        </nav>
+        <%- include('../partials/account-pagination', { page: data.page, totalPages: data.pages, linkTo: pageUrl }) %>
     <% } %>
 </main></body></html>

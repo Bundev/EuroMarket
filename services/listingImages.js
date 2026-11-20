@@ -176,12 +176,12 @@ async function serve(req, res) {
     try {
         const viewer = req.session?.user?.id ?? null;
         const [[allowed]] = await db.execute(
-            `SELECT (l.status='active' AND l.moderation_locked=0 AND owner.status='active') AS is_public
+            `SELECT (l.status='active' AND (l.expires_at IS NULL OR l.expires_at>UTC_TIMESTAMP(3)) AND l.moderation_locked=0 AND owner.status='active') AS is_public
              FROM listing_images i JOIN listings l ON l.id=i.listing_id
              JOIN users owner ON owner.id=l.user_id
              LEFT JOIN users viewer ON viewer.id=? AND viewer.status='active'
              WHERE i.image_path=? AND (
-                 (l.status='active' AND l.moderation_locked=0 AND owner.status='active')
+                 (l.status='active' AND (l.expires_at IS NULL OR l.expires_at>UTC_TIMESTAMP(3)) AND l.moderation_locked=0 AND owner.status='active')
                  OR viewer.id=l.user_id OR viewer.role='admin'
                  OR (viewer.id IS NOT NULL AND l.status='sold' AND l.moderation_locked=0 AND owner.status='active'
                      AND EXISTS (SELECT 1 FROM deals d WHERE d.reserved_listing_id=l.id AND d.buyer_id=viewer.id AND d.status='completed'))

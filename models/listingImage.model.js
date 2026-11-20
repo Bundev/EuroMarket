@@ -28,8 +28,8 @@ async function addImages(listingId, imagePaths, startOrder = 0, connection = db)
 }
 
 // Получение фотографий объявления
-async function getImagesByListingId(listingId) {
-    const [rows] = await db.execute(
+async function getImagesByListingId(listingId, connection = db) {
+    const [rows] = await connection.execute(
         `SELECT id, image_path, sort_order
          FROM listing_images
          WHERE listing_id = ?
@@ -38,6 +38,12 @@ async function getImagesByListingId(listingId) {
     );
 
     return rows;
+}
+
+async function reorder(listingId, ids, connection) {
+    const cases = ids.map(() => 'WHEN ? THEN ?').join(' ');
+    await connection.execute(`UPDATE listing_images SET sort_order=CASE id ${cases} ELSE sort_order END WHERE listing_id=?`,
+        [...ids.flatMap((id, index) => [id, index]), listingId]);
 }
 
 // Удаление записи фотографии
@@ -55,6 +61,7 @@ async function deleteImage(imageId, listingId, connection = db) {
 module.exports = {
     addImages,
     getImagesByListingId,
+    reorder,
     deleteImage
 
 };

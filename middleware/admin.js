@@ -12,8 +12,7 @@ async function requireAdmin(req, res, next) {
         if (!rows.length) return res.status(403).send('Доступ запрещён.');
         res.locals.admin = rows[0];
         if (req.method === 'GET') {
-            res.locals.pendingModerationCount = await require('../models/listingModeration.model').stats();
-            res.locals.openDisputeCount = await require('../models/dispute.model').openCount();
+            res.locals.adminCounts = await require('../models/admin.model').counters();
         }
         next();
     } catch (error) {

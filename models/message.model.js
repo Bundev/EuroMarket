@@ -16,7 +16,7 @@ async function start(userId, listingId) {
          SELECT l.id, ?, l.user_id, l.title FROM listings l
          JOIN users seller ON seller.id = l.user_id AND seller.status = 'active'
          JOIN users buyer ON buyer.id = ? AND buyer.status = 'active'
-         WHERE l.id = ? AND l.status = 'active' AND l.moderation_locked=0 AND l.user_id <> ?
+         WHERE l.id = ? AND l.status = 'active' AND (l.expires_at IS NULL OR l.expires_at>UTC_TIMESTAMP(3)) AND l.moderation_locked=0 AND l.user_id <> ?
          ON DUPLICATE KEY UPDATE conversations.id = LAST_INSERT_ID(conversations.id)`,
         [userId, userId, listingId, userId]
     );

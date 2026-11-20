@@ -8,7 +8,7 @@ async function index(req, res) {
     res.set('Cache-Control', 'no-store');
     try {
         const [rows] = await db.execute(
-            `SELECT id, name, email, role, phone, phone_public, created_at, save_listing_history
+            `SELECT id, name, email, role, phone, phone_public, phone_verified_at, created_at, save_listing_history
              FROM users
              WHERE id = ? AND status = 'active'
              LIMIT 1`,
@@ -55,7 +55,9 @@ async function savePhone(req, res) {
             "SELECT id FROM users WHERE id = ? AND status = 'active'", [req.session.user.id]
         );
         if (!users.length) return res.status(403).send('Профиль недоступен.');
-        await userModel.updatePhone(req.session.user.id, phone, phone !== null && req.body.phone_public === '1');
+        if (!await userModel.updatePhone(req.session.user.id, phone, phone !== null && req.body.phone_public === '1')) {
+            return res.status(403).send('Профиль недоступен.');
+        }
         flash(req, 'success', 'Настройки профиля сохранены. Телефон и его публичность обновлены.');
         res.redirect(303, '/profile');
     } catch (error) {
@@ -87,7 +89,8 @@ async function myListings(req, res, next) {
     try {
         const result = await listingModel.getUserListings(req.session.user.id, { status, q, sort, requestedPage });
         const pageUrl = overrides => '/my-listings?' + new URLSearchParams({ status, q, sort, ...overrides });
-        res.render('pages/my-listings', { ...result, tabs, sorts, status, sort, q, pageUrl });
+        res.render('pages/my-listings', { ...result, tabs, sorts, status, sort, q, pageUrl,
+            lifecycleKey: require('node:crypto').randomUUID });
     } catch (error) { next(error); }
 }
 

@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const breadcrumbs = require('../services/breadcrumbs');
 const crypto = require('crypto');
 const favoriteModel = require('../models/favorite.model');
 const messageModel = require('../models/message.model');
@@ -40,6 +41,7 @@ async function pageContext(req, res, next) {
             : [];
 
         Object.assign(res.locals, {
+            pageBreadcrumbs: breadcrumbs.forRequest(req),
             user: req.session.user || null,
             viewingHistoryEnabled,
             unreadMessages: req.session.user ? await messageModel.unreadCount(req.session.user.id) : 0,

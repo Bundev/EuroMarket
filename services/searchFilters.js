@@ -48,10 +48,12 @@ async function parse(input, countries, categories, category) {
     return { filters, currencies, locationError, filterError };
 }
 
-function params({ search, countryId, cityId, categoryId, currency, minPrice, maxPrice }) {
-    return new URLSearchParams(Object.entries({
-        search, country_id: countryId, city_id: cityId, category_id: categoryId, currency, min_price: minPrice, max_price: maxPrice
+function params({ search, countryId, cityId, categoryId, currency, minPrice, maxPrice, sort, attributeQuery }) {
+    const query = new URLSearchParams(Object.entries({
+        search, country_id: countryId, city_id: cityId, category_id: categoryId, currency, min_price: minPrice, max_price: maxPrice, sort
     }).filter(([, value]) => value != null && value !== ''));
+    for (const [key, value] of new URLSearchParams(attributeQuery)) query.append(key, value);
+    return query;
 }
 
 function url(filters) {

@@ -24,11 +24,6 @@ async function latestForDeal(dealId) {
     return row;
 }
 
-async function openCount() {
-    const [[row]] = await db.query("SELECT COUNT(*) AS total FROM deal_disputes WHERE status IN ('open','info_requested')");
-    return Number(row.total);
-}
-
 async function findVisible(id, actor, allowAdmin = true) {
     const [[row]] = await db.execute(
         `SELECT s.id,s.deal_id,s.reason,s.status,s.version,s.created_at,
@@ -153,4 +148,4 @@ async function decide(id, actor, key, version, action, body) {
     });
 }
 
-module.exports = { openStatuses, openCount, latestForDeal, findVisible, image, history, queue, open, reply, decide };
+module.exports = { openStatuses, latestForDeal, findVisible, image, history, queue, open, reply, decide };

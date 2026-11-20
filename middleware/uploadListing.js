@@ -18,19 +18,22 @@ const storage = {
     }
 };
 
-const parser = multer({
+function parser(fields) { return multer({
     storage,
-    limits: { fileSize: images.MAX_FILE_BYTES, files: 10, fields: 12, parts: 22, fieldSize: 64 * 1024, fieldNameSize: 100, headerPairs: 100 },
+    limits: { fileSize: images.MAX_FILE_BYTES, files: 10, fields, parts: fields + 11, fieldSize: 64 * 1024, fieldNameSize: 100, headerPairs: 100 },
     fileFilter(req, file, callback) {
         if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype) || !/\.(?:jpe?g|png|webp)$/i.test(file.originalname)) {
             return callback(images.invalid('Разрешены только JPEG, PNG и WebP.'));
         }
         callback(null, true);
     }
-});
+}); }
 
 let active = 0;
-module.exports.array = (field, count) => async (req, res, next) => {
+module.exports.array = (field, count, fields = 16) => {
+    const parse = parser(fields).array(field, count);
+    return async (req, res, next) => {
+    if (!req.is('multipart/form-data')) return next();
     if (active >= 4) return res.status(503).send('Загрузка занята. Повторите попытку позже.');
     active++;
     let released = false;
@@ -42,7 +45,7 @@ module.exports.array = (field, count) => async (req, res, next) => {
             void images.dispose(req, false).finally(release);
         };
         req.once('aborted', abort);
-        parser.array(field, count)(req, res, async error => {
+        parse(req, res, async error => {
             req.removeListener('aborted', abort);
             if (error || req.aborted) {
                 await images.dispose(req, false);
@@ -58,4 +61,5 @@ module.exports.array = (field, count) => async (req, res, next) => {
         release();
         res.status(503).send('Не удалось начать загрузку фотографий.');
     }
+    };
 };

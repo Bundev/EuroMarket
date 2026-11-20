@@ -31,7 +31,14 @@
                 <article class="card card-body mb-3" aria-labelledby="saved-title-<%= search.id %>">
                     <h2 class="h5" id="saved-title-<%= search.id %>"><%= search.name %></h2>
                     <p class="text-muted"><%= filters.length ? filters.join(' · ') : 'Все объявления' %></p>
-                    <p><a href="/saved-searches/<%= search.id %>/open">Открыть поиск</a></p>
+                    <% if (search.attributeLabels.length) { %>
+                        <ul class="list-unstyled d-flex flex-wrap gap-2">
+                            <% for (const label of search.attributeLabels) { %><li class="badge text-bg-light text-break text-wrap"><%= label %></li><% } %>
+                        </ul>
+                    <% } %>
+                    <% if (search.stale) { %><p class="text-danger">Условия устарели. Обновите их, чтобы возобновить подбор.</p><% } %>
+                    <p class="d-flex flex-wrap gap-3"><a href="/saved-searches/<%= search.id %>/open">Открыть поиск</a>
+                        <a href="/saved-searches/<%= search.id %>/open?edit=1">Изменить условия</a></p>
                     <form method="post" action="/saved-searches/<%= search.id %>">
                         <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
                         <label class="form-label" for="saved-name-<%= search.id %>">Название поиска</label>

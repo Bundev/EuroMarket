@@ -31,6 +31,8 @@ async function start() {
             await db.query('SELECT id, seller_id, follower_id FROM seller_follows LIMIT 0');
             await db.query('SELECT id, user_id, criteria_key, notify FROM saved_searches LIMIT 0');
             await db.query('SELECT listing_id, review_version, last_follow_id, max_follow_id, last_search_id, max_search_id, finished_at FROM seller_publication_jobs LIMIT 0');
+            await db.query('SELECT published_at,expires_at,expired_at,bumped_at,approved_version FROM listings LIMIT 0');
+            await db.query('SELECT user_id,request_key,fingerprint,result FROM listing_lifecycle_requests LIMIT 0');
             const [[notificationType]] = await db.query(
                 "SELECT COLUMN_TYPE AS type FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notifications' AND COLUMN_NAME='type'"
             );

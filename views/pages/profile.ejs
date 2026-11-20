@@ -10,6 +10,7 @@
 
         <h1 class="h3 mb-4">Мой профиль</h1>
         <p><a href="/users/<%= user.id %>">Открыть мой публичный профиль</a></p>
+        <p><a href="/profile?edit=1#profile-name">Редактировать профиль</a></p>
         <section class="card card-body mb-3" aria-labelledby="account-info">
             <h2 class="h5" id="account-info">Личные данные</h2>
             <p>Email: <%= user.email %></p>
@@ -41,6 +42,26 @@
                 </form>
             </section>
 
+            <section id="phone-verification" aria-labelledby="phone-verification-title">
+                <h3 class="h5" id="phone-verification-title">Подтверждение телефона</h3>
+                <% if (user.phone_verified_at) { %>
+                    <%- include('../partials/verified-phone', { verified: true }) %>
+                <% } else if (!user.phone) { %><p>Сначала сохраните номер телефона.</p>
+                <% } else { %>
+                    <p class="small text-muted">Код из SMS действует 10 минут.</p>
+                    <form action="/profile/phone/verification/send" method="post" class="mb-2">
+                        <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                        <button class="btn btn-outline-primary">Отправить код по SMS</button>
+                    </form>
+                    <form action="/profile/phone/verification/confirm" method="post">
+                        <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                        <label for="phone-code" class="form-label">Код подтверждения</label>
+                        <input id="phone-code" class="form-control mb-2" name="code" inputmode="numeric" autocomplete="one-time-code"
+                               pattern="[0-9]{6}" maxlength="6" required>
+                        <button class="btn btn-primary">Подтвердить телефон</button>
+                    </form>
+                <% } %>
+            </section>
             <section aria-labelledby="viewing-history-title">
                 <h3 class="h5" id="viewing-history-title">История просмотров</h3>
                 <p class="text-muted">Отключение останавливает сохранение новых просмотров. Сохранённую историю можно очистить на странице <a href="/recently-viewed">«Недавно просмотренные»</a>.</p>

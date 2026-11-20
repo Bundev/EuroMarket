@@ -1,0 +1,7 @@
+<nav class="admin-tabs mb-3" aria-label="Тип жалобы">
+<% for (const [type,path,label] of [['listingReports','/admin/reports','На объявления'],['sellerReports','/admin/seller-reports','На продавцов'],['reviewReports','/admin/reports/reviews','На отзывы']]) { %>
+    <a href="<%= path %>" class="admin-tab<%= reportType === type ? ' is-current' : '' %>" <% if (reportType === type) { %>aria-current="page"<% } %>>
+        <%= label %> <span class="badge text-bg-light"><%= adminCounts[type] %><span class="visually-hidden"> открыто</span></span>
+    </a>
+<% } %>
+</nav>

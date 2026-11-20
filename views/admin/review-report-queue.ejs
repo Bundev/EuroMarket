@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><%- include('../partials/head', { pageTitle: 'Жалобы на отзывы' }) %></head>
+<body class="bg-light">
+<%- include('../partials/toasts') %>
+<%- include('../partials/header') %>
+<main class="container py-4 admin-page">
+    <%- include('nav', { section: 'reports' }) %>
+    <h1 class="h3 mb-3">Жалобы на отзывы</h1>
+    <%- include('report-nav', { reportType: 'reviewReports' }) %>
+    <% if (!items.length) { %><p class="admin-record">Открытых жалоб на отзывы нет.</p><% } %>
+    <% for (const item of items) { %>
+        <article class="admin-record mb-3">
+            <h2 class="h6"><a href="/admin/reports/reviews/<%= item.deal_id %>">Жалобы на отзыв №<%= item.deal_id %></a></h2>
+            <p class="mb-0">Открыто: <%= item.total %> · <%= item.last_report.toLocaleDateString('ru-RU') %></p>
+        </article>
+    <% } %>
+    <%- include('../partials/account-pagination', { page, totalPages, linkTo: value => '/admin/reports/reviews?page=' + value }) %>
+</main>
+</body>
+</html>

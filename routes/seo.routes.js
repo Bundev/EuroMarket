@@ -5,7 +5,7 @@ const seo = require('../services/seo');
 
 const chunkSize = 10000;
 const publicListings = `FROM listings l JOIN users u ON u.id=l.user_id AND u.status='active'
-    WHERE l.status='active' AND l.moderation_locked=0`;
+    WHERE l.status='active' AND (l.expires_at IS NULL OR l.expires_at>UTC_TIMESTAMP(3)) AND l.moderation_locked=0`;
 const xml = value => String(value).replace(/[<>&"']/g, char => ({
     '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;'
 })[char]);

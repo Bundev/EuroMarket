@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const transaction = require('../config/transaction');
 const { lockParties, lockListing, requestPurchase } = require('./deal.model');
+const { requireGoodsCategory } = require('./category.model');
 
 const events = {
     offered: 'Новое предложение цены',
@@ -24,7 +25,9 @@ async function available(connection, listingId, buyer, seller) {
     if (!await lockParties(connection, buyer, seller)) fail('Объявление недоступно для торга.', 404);
     const listing = await lockListing(connection, listingId);
     if (!listing || listing.user_id !== seller || listing.status !== 'active' ||
-        listing.moderation_locked || !listing.bargaining_enabled) fail('Объявление недоступно для торга.', 404);
+        listing.is_expired || listing.moderation_locked) fail('Объявление недоступно для торга.', 404);
+    await requireGoodsCategory(connection, listing.category_id);
+    if (!listing.bargaining_enabled) fail('Объявление недоступно для торга.', 404);
     const [[reserved]] = await connection.execute('SELECT id FROM deals WHERE reserved_listing_id=? FOR UPDATE', [listingId]);
     if (reserved) fail('Объявление зарезервировано.');
     return listing;
@@ -96,7 +99,7 @@ async function reply(id, actor, version, action, amount) {
 async function details(id, actor) {
     const [[offer]] = await db.execute(
         `SELECT n.*, l.price AS current_price,
-         (l.status='active' AND l.moderation_locked=0 AND l.bargaining_enabled AND l.user_id=n.seller_id
+         (l.status='active' AND (l.expires_at IS NULL OR l.expires_at>UTC_TIMESTAMP(3)) AND l.moderation_locked=0 AND l.bargaining_enabled AND l.user_id=n.seller_id
           AND l.review_version=n.listing_version AND l.currency=n.currency AND b.status='active' AND s.status='active'
           AND n.updated_at>CURRENT_TIMESTAMP(3)-INTERVAL 7 DAY
           AND NOT EXISTS (SELECT 1 FROM deals WHERE reserved_listing_id=l.id)) AS available

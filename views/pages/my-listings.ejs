@@ -65,6 +65,14 @@
                     </div>
 
                 <% } else { %>
+                    <form id="listing-bulk" class="d-flex flex-wrap gap-2 mb-3" method="post" action="/my-listings/lifecycle" aria-label="Действия с выбранными объявлениями">
+                        <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                        <input type="hidden" name="request_key" value="<%= lifecycleKey() %>">
+                        <button class="btn btn-outline-primary btn-sm" name="action" value="renew">Продлить выбранные</button>
+                        <button class="btn btn-outline-secondary btn-sm" name="action" value="archive"
+                                data-confirm="Перенести выбранные объявления в архив?">Архивировать выбранные</button>
+                        <button class="btn btn-outline-primary btn-sm" name="action" value="restore">Вернуть в публикацию</button>
+                    </form>
 
                     <div class="row g-3">
 
@@ -96,6 +104,10 @@
                                     </a>
 
                                     <div class="card-body">
+                                        <label class="form-check mb-2">
+                                            <input type="checkbox" class="form-check-input" form="listing-bulk" name="ids" value="<%= listing.id %>">
+                                            <span class="form-check-label small">Выбрать<span class="visually-hidden"> <%= listing.title %></span></span>
+                                        </label>
 
                                         <h5 class="card-title">
                                             <a href="/listings/<%= listing.id %>"
@@ -115,7 +127,9 @@
 
                                         <div class="mt-3">
 
-                                            <% if (listing.status === 'active') { %>
+                                            <% if (listing.expired && ['active','archived'].includes(listing.status)) { %>
+                                                <span class="badge bg-secondary">Срок истёк</span>
+                                            <% } else if (listing.status === 'active') { %>
 
                                                 <span class="badge bg-success">
                                                     Активное
@@ -146,6 +160,29 @@
 
                                             <% } %>
                                             <%- include('../partials/seller-metrics', { metrics: listing, summary: false }) %>
+                                            <dl class="small text-muted my-2">
+                                                <dt>Публикация</dt><dd><%= listing.publication_date || 'Дата не указана' %></dd>
+                                                <dt>Срок действия (UTC)</dt><dd><%= listing.expiry_date ? listing.expiry_date + ' · осталось дней: ' + listing.days_left : 'Срок не задан' %></dd>
+                                                <dt>Последнее поднятие (UTC)</dt><dd><%= listing.bump_date || 'Поднятий нет' %></dd>
+                                                <% if (listing.status === 'active' && !listing.expired && !listing.moderation_locked) { %>
+                                                    <dt>Следующее поднятие (UTC)</dt><dd><%= listing.next_bump_date || 'Доступно сейчас' %></dd>
+                                                <% } %>
+                                            </dl>
+                                            <% const lifecycleActions = [];
+                                            if (!listing.moderation_locked) {
+                                                if (listing.status === 'active' || (listing.expired && ['archived', 'pending_review'].includes(listing.status))) lifecycleActions.push(['renew', 'Продлить']);
+                                                if (listing.status === 'active' && !listing.expired && !listing.next_bump_date) lifecycleActions.push(['bump', 'Поднять']);
+                                            } %>
+                                            <div class="d-flex flex-wrap gap-2">
+                                                <% for (const [action, label] of lifecycleActions) { %>
+                                                    <form method="post" action="/my-listings/lifecycle">
+                                                        <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
+                                                        <input type="hidden" name="request_key" value="<%= lifecycleKey() %>">
+                                                        <input type="hidden" name="ids" value="<%= listing.id %>">
+                                                        <button class="btn btn-outline-primary btn-sm" name="action" value="<%= action %>"><%= label %></button>
+                                                    </form>
+                                                <% } %>
+                                            </div>
                                             <% if (['draft', 'active', 'pending_review', 'rejected'].includes(listing.status)) { %>
                                                 <a href="/listings/<%= listing.id %>/edit"
                                                 class="btn btn-outline-primary btn-sm mt-3">

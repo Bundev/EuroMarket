@@ -35,6 +35,7 @@ async function open(req, res) {
     const id = parseId(req.params.id);
     const link = id && await model.target(req.session.user.id, id);
     let permitted = false;
+    if (link === '/my-listings') permitted = true;
     const chat = link && /^\/messages\/([1-9]\d*)$/.exec(link);
     const listing = link && /^\/listings\/([1-9]\d*)$/.exec(link);
     const reviews = link && /^\/users\/([1-9]\d*)\/reviews$/.exec(link);
@@ -54,7 +55,7 @@ async function open(req, res) {
     if (chat) permitted = Boolean(await messages.getConversation(Number(chat[1]), req.session.user.id));
     if (listing) {
         const row = await listings.getListingById(Number(listing[1]));
-        permitted = row && ((row.status === 'active' && !row.moderation_locked && row.seller_status === 'active') ||
+        permitted = row && ((row.status === 'active' && !row.is_expired && !row.moderation_locked && row.seller_status === 'active') ||
             Number(row.user_id) === Number(req.session.user.id));
     }
     if (!permitted) return res.status(404).send('Уведомление или связанная страница больше недоступны.');

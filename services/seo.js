@@ -47,6 +47,12 @@ function jsonForHtml(data) {
 
 function apply(res, { path, title, description, image, structured, indexable = true }) {
     const canonical = absolute(res, path);
+    const trail = res.locals.pageBreadcrumbs;
+    if (indexable && trail?.length > 1) {
+        const chain = breadcrumbs(res, trail.map((item, index) => index === trail.length - 1 ? { ...item, path } : item));
+        structured = structured ? { ...structured, '@graph': [...structured['@graph'], chain] }
+            : { '@context': 'https://schema.org', ...chain };
+    }
     res.locals.seo = {
         title, description, canonical: indexable ? canonical : null,
         image: image && absolute(res, image), json: structured && jsonForHtml(structured),
@@ -59,7 +65,7 @@ function breadcrumbs(res, items) {
     return {
         '@type': 'BreadcrumbList',
         itemListElement: items.map(({ name, path }, index) => ({
-            '@type': 'ListItem', position: index + 1, name, item: absolute(res, path)
+            '@type': 'ListItem', position: index + 1, name: plain(name, 150) || 'EuroMarket', item: absolute(res, path)
         }))
     };
 }

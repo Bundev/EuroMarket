@@ -133,8 +133,8 @@ async function run() {
         const uploaded = await request(seller, '/listings/' + listing + '/images', photoForm(false), 200, true);
         assert.equal(JSON.parse(uploaded.text).redirect, '/listings/' + listing + '/edit');
         const editPage = await once(seller, '/listings/' + listing + '/edit', 'Фотографии добавлены');
-        assert.match(editPage.text, /data-existing-count="2"/);
-        assert.match(editPage.text, /src="\/js\/listing-upload.js"/);
+        assert.equal((editPage.text.match(/data-editor-photo="\d+"/g) || []).length, 2);
+        assert.ok(editPage.text.includes('src="/js/listing-editor.js"'));
         const image = (await db.execute('SELECT id FROM listing_images WHERE listing_id=? LIMIT 1', [listing]))[0][0].id;
         await request(seller, '/listings/' + listing + '/images/' + image + '/delete', { _csrf: seller.token }, 302);
         await once(seller, '/listings/' + listing + '/edit', 'Фотография удалена'); checks.push('upload and delete photo flashes');

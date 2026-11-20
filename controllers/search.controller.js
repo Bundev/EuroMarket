@@ -3,10 +3,14 @@ const listingModel = require('../models/listing.model');
 const categoryModel = require('../models/category.model');
 const searchFilters = require('../services/searchFilters');
 const seo = require('../services/seo');
+const breadcrumbs = require('../services/breadcrumbs');
+const attributes = require('../services/listingAttributes');
+const savedSearches = require('../models/savedSearch.model');
 
 async function searchPage(req, res) {
     try {
-        const categories = await categoryModel.getAllCategories();
+        const categoryTree = await categoryModel.getAllCategories({ includeInactive: true });
+        const categories = categoryTree.filter(item => item.is_active);
         const category = req.params.slug
             ? categories.find(item => item.slug === req.params.slug)
             : null;
@@ -14,6 +18,10 @@ async function searchPage(req, res) {
             return res.status(404).send('Категория не найдена');
         }
         const isFavoritesPage = req.path === '/favorites';
+        const editId = req.query.edit_saved;
+        const editingSearch = !category && !isFavoritesPage && typeof editId === 'string' && /^[1-9]\d{0,19}$/.test(editId) &&
+            req.session.user && await savedSearches.find(req.session.user.id, editId);
+        if (editId !== undefined && !editingSearch) return res.sendStatus(404);
         const searchAction = isFavoritesPage ? '/favorites' :
             category ? '/category/' + encodeURIComponent(category.slug) : '/search';
         const { filters, currencies, locationError, filterError: criteriaError } =
@@ -23,12 +31,22 @@ async function searchPage(req, res) {
         const selectedCategory = category || categories.find(item => Number(item.id) === categoryId);
         const navigation = selectedCategory
             ? categoryModel.getCategoryNavigation(selectedCategory, categories)
-            : { categoryIds: null, breadcrumbs: [], subcategories: [] };
+            : { categoryIds: null, subcategories: [] };
         const sort = req.query.sort ?? 'newest';
         filters.sort = sort;
         filters.categoryIds = navigation.categoryIds;
         if (isFavoritesPage) filters.favoriteUserId = req.session.user.id;
         let filterError = criteriaError;
+        const attributeGroups = attributes.groups(categories);
+        let attributeQuery = new URLSearchParams();
+        try {
+            const selected = attributes.filters(attributes.fieldsFor(selectedCategory?.id, categories), req.query);
+            filters.attributeFilters = selected.constraints;
+            attributeQuery = selected.query;
+            filters.attributeQuery = attributeQuery.toString();
+        } catch (error) {
+            filterError ||= error.message;
+        }
         if (!filterError && (typeof sort !== 'string' || !Object.hasOwn(listingModel.SEARCH_SORTS, sort))) {
             filterError = 'Выберите сортировку из списка.';
         } else if (!filterError && !currency && ['price_asc', 'price_desc'].includes(sort)) {
@@ -54,19 +72,20 @@ async function searchPage(req, res) {
             const titleLabel = categories.some(item => item.id !== category.id && seo.plain(item.name, 80) === label)
                 ? label + ' · ' + seo.plain(category.slug, 60) : label;
             const pageLabel = result.page > 1 ? ' · страница ' + result.page : '';
-            const trail = [{ name: 'Главная', path: '/' }, ...navigation.breadcrumbs.map((item, index, items) => ({
+            const ancestors = categoryModel.getCategoryAncestors(category, categoryTree).filter(item => item.is_active);
+            res.locals.pageBreadcrumbs = breadcrumbs.trail(...ancestors.map((item, index, items) => ({
                 name: item.name, path: index === items.length - 1 ? seo.pagedPath(searchAction, result.page) : seo.categoryPath(item.slug)
-            }))];
+            })));
             seo.apply(res, {
                 path: seo.pagedPath(searchAction, result.page),
                 title: `${titleLabel}${pageLabel} — объявления в Европе | EuroMarket`,
                 description: `Объявления категории «${label}» на EuroMarket, раздел ${category.slug}${pageLabel}. Каталог предложений по странам Европы.`,
-                structured: { '@context': 'https://schema.org', ...seo.breadcrumbs(res, trail) },
                 indexable: isCleanCategory
             });
         }
 
         const query = searchFilters.params(filters);
+        if (editingSearch) query.set('edit_saved', editingSearch.id);
         query.set('sort', sort);
         if (category && countryId === null) query.set('country_id', '');
         const pageUrl = page => {
@@ -93,13 +112,15 @@ async function searchPage(req, res) {
             categoryLink,
             listingPath: seo.listingPath,
             isFavoritesPage,
-            saveFields: searchAction === '/search' && !filterError ? searchFilters.params(filters) : null,
+            saveFields: !isFavoritesPage && !filterError ? searchFilters.params(filters) : null,
+            editingSearch,
             searchAction,
-            breadcrumbs: navigation.breadcrumbs,
             subcategories: navigation.subcategories,
             minPriceInput: typeof req.query.min_price === 'string' ? req.query.min_price : '',
             maxPriceInput: typeof req.query.max_price === 'string' ? req.query.max_price : '',
             categories,
+            attributeGroups,
+            attributeQuery,
             currencies,
             filterError,
             ...result,

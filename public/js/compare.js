@@ -9,6 +9,8 @@
     const buttons = [...document.querySelectorAll('[data-compare-id]')];
     const links = [...document.querySelectorAll('a[href="/compare"]')];
     const page = document.querySelector('[data-compare-page]');
+    const header = document.querySelector('[data-header-compare]');
+    const count = header?.querySelector('[data-compare-count]');
     const url = ids => ids.length ? '/compare?ids=' + ids.join(',') : '/compare';
     if (page && !location.search && ids.length) {
         location.replace(url(ids));
@@ -27,10 +29,15 @@
         buttons.forEach(button => {
             const selected = ids.includes(button.dataset.compareId);
             button.setAttribute('aria-pressed', String(selected));
-            button.textContent = selected ? 'В сравнении' : 'Сравнить';
+            button.querySelector('[data-compare-label]').textContent = selected ? 'В сравнении' : 'Сравнить';
             button.hidden = false;
         });
         links.forEach(link => { link.href = url(ids); });
+        if (count) {
+            count.textContent = ids.length || '';
+            count.hidden = ids.length === 0;
+            header.setAttribute('aria-label', ids.length ? 'Сравнение, выбрано ' + ids.length + ' из 4' : 'Сравнение');
+        }
     }
 
     buttons.forEach(button => button.addEventListener('click', () => {
@@ -49,5 +56,18 @@
         save();
         location.replace(url(ids));
     }));
+    page?.querySelector('[data-compare-clear]')?.addEventListener('click', () => {
+        if (!window.confirm('Очистить список сравнения?')) return;
+        ids = [];
+        save();
+        render();
+        location.replace('/compare');
+    });
+    const differences = page?.querySelector('[data-compare-differences]');
+    differences?.addEventListener('change', () => {
+        page.querySelectorAll('[data-compare-same]').forEach(row => { row.hidden = differences.checked; });
+        page.querySelector('[data-compare-no-differences]').hidden =
+            !differences.checked || Boolean(page.querySelector('.compare-difference'));
+    });
     render();
 })();

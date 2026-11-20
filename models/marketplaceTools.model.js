@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const transaction = require('../config/transaction');
+const attributes = require('./listingAttributes.model');
 
 // Both seller pages select at most one page of listings before computing these counts.
 const listingMetrics = `l.views,
@@ -9,13 +10,15 @@ const listingMetrics = `l.views,
 async function comparison(ids) {
     if (!ids.length) return [];
     const [rows] = await db.execute(
-        `SELECT l.id,l.title,l.description,l.item_condition,l.price,l.currency,c.name AS category,
-                co.name AS country,ci.name AS city
+        `SELECT l.id,l.title,l.item_condition,l.price,l.currency,c.id AS category_id,c.name AS category,
+                co.name AS country,ci.name AS city,
+                (SELECT i.image_path FROM listing_images i WHERE i.listing_id=l.id ORDER BY i.sort_order,i.id LIMIT 1) AS main_image
          FROM listings l JOIN users u ON u.id=l.user_id AND u.status='active'
          JOIN countries co ON co.id=l.country_id JOIN categories c ON c.id=l.category_id
          LEFT JOIN cities ci ON ci.id=l.city_id
-         WHERE l.status='active' AND l.moderation_locked=0 AND l.id IN (${ids.map(() => '?').join(',')})`, ids);
-    const byId = new Map(rows.map(row => [row.id, row]));
+         WHERE l.status='active' AND (l.expires_at IS NULL OR l.expires_at>UTC_TIMESTAMP(3)) AND l.moderation_locked=0 AND l.id IN (${ids.map(() => '?').join(',')})`, ids);
+    const values = await attributes.load(rows.map(row => row.id), db, true);
+    const byId = new Map(rows.map(row => [row.id, { ...row, characteristics: attributes.formatted(values.get(row.id), row.item_condition) }]));
     return ids.map(id => byId.get(id)).filter(Boolean);
 }
 
@@ -23,7 +26,7 @@ async function prices(id, userId) {
     const [rows] = await db.execute(
         `SELECT h.price,h.currency,h.is_drop,h.published_at
          FROM listing_price_history h JOIN listings l ON l.id=h.listing_id JOIN users u ON u.id=l.user_id
-         WHERE l.id=? AND (l.user_id=? OR (l.status='active' AND l.moderation_locked=0 AND u.status='active'))
+         WHERE l.id=? AND (l.user_id=? OR (l.status='active' AND (l.expires_at IS NULL OR l.expires_at>UTC_TIMESTAMP(3)) AND l.moderation_locked=0 AND u.status='active'))
          ORDER BY h.id DESC LIMIT 30`, [id, userId ?? null]);
     return rows;
 }
@@ -67,7 +70,7 @@ async function setPriceAlert(id, userId, enabled) {
     const [result] = await db.execute(
         `UPDATE favorites f JOIN listings l ON l.id=f.listing_id JOIN users u ON u.id=l.user_id
          SET f.notify_price_drop=? WHERE f.listing_id=? AND f.user_id=? AND l.user_id<>f.user_id
-           AND l.status='active' AND l.moderation_locked=0 AND u.status='active'`, [enabled, id, userId]);
+           AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>UTC_TIMESTAMP(3)) AND l.moderation_locked=0 AND u.status='active'`, [enabled, id, userId]);
     return result.affectedRows > 0;
 }
 

@@ -4,7 +4,7 @@
 <body class="bg-light">
 <%- include('../partials/toasts') %>
 <%- include('../partials/header') %>
-<main class="container py-4">
+<main class="container py-4 admin-page">
     <%- include('./nav', { section }) %>
     <h1 class="h3 mb-3">Споры по сделкам</h1>
     <form method="get" class="row g-2 align-items-end mb-3">
@@ -31,12 +31,12 @@
     <% if (!items.length) { %><p class="card card-body">Споры не найдены.</p><% } %>
     <ul class="list-group mb-3">
         <% for (const item of items) { %>
-            <li class="list-group-item d-flex flex-wrap justify-content-between gap-2">
+            <li class="admin-record mb-2 d-flex flex-wrap justify-content-between gap-2">
                 <div>
                     <a href="/disputes/<%= item.id %>">Спор №<%= item.id %></a> · сделка №<%= item.deal_id %>
                     <span class="d-block text-muted small"><%= reasons[item.reason] %> · <%= item.created_at.toLocaleDateString('ru-RU') %></span>
                 </div>
-                <span class="badge text-bg-secondary align-self-start text-wrap"><%= statuses[item.status] %></span>
+                <%- include('status', { tone: {open:'warning',info_requested:'warning',resolved:'success',rejected:'danger'}[item.status], label: statuses[item.status] }) %>
             </li>
         <% } %>
     </ul>

@@ -14,29 +14,6 @@
 <%- include('../partials/header') %>
 
 <main class="container py-4">
-    <nav aria-label="Хлебные крошки">
-        <ol class="breadcrumb flex-wrap">
-            <% for (const [index, item] of trail.entries()) { %>
-                <% if (index === trail.length - 1) { %>
-                    <li class="breadcrumb-item active" aria-current="page"><%= item.name %></li>
-                <% } else { %>
-                    <li class="breadcrumb-item"><a href="<%= item.path %>"><%= item.name %></a></li>
-                <% } %>
-            <% } %>
-        </ol>
-    </nav>
-
-    <!-- Навигация -->
-    <nav class="mb-4">
-        <a href="/" class="text-decoration-none">
-            Главная
-        </a>
-        <span class="text-muted mx-2">/</span>
-        <span class="text-muted">
-            <%= listing.category_name %>
-        </span>
-    </nav>
-
     <div class="row g-4">
 
 
@@ -126,6 +103,16 @@
 
                     <hr>
 
+                    <% if (typeof characteristics !== 'undefined' && characteristics.length) { %>
+                        <section class="mb-4" aria-labelledby="listing-characteristics">
+                            <h5 id="listing-characteristics">Характеристики</h5>
+                            <dl class="row mb-0">
+                                <% for (const field of characteristics) { %>
+                                    <dt class="col-6"><%= field.label %></dt><dd class="col-6 text-break"><%= field.value %></dd>
+                                <% } %>
+                            </dl>
+                        </section>
+                    <% } %>
                     <h5>Описание</h5>
 
                     <p class="listing-description">
@@ -146,7 +133,6 @@
                     <% if (typeof isPublic !== 'undefined' && isPublic) { %>
                         <div class="mb-2"><%- include('../partials/compare-button', { listing }) %></div>
                     <% } %>
-                    <% if (listing.item_condition) { %><p>Состояние: <%= listing.item_condition %></p><% } %>
                     <% if (typeof priceAlert === 'boolean') { %>
                         <form action="/listings/<%= listing.id %>/price-alert" method="post" class="mb-2">
                             <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
@@ -179,6 +165,7 @@
                             <div class="fw-semibold">
                                 <% if (listing.seller_status === 'active') { %>
                                     <a href="/users/<%= listing.user_id %>"><%= listing.seller_name %></a>
+                                    <%- include('../partials/verified-phone', { verified: listing.seller_phone_verified }) %>
                                 <% } else { %>
                                     <%= listing.seller_name %>
                                 <% } %>
@@ -187,6 +174,8 @@
                                 На EuroMarket с <%= new Date(listing.seller_created_at).toLocaleDateString('ru-RU') %>
                             </div>
                             <div class="small text-muted">Активных объявлений: <%= listing.seller_active_count %></div>
+                            <div class="small text-muted">Завершённых сделок: <%= listing.seller_completed_deals ?? 0 %></div>
+                            <% if (!listing.seller_phone_verified) { %><div class="small text-muted">Телефон не подтверждён</div><% } %>
                             <div class="seller-rating-row small mt-1">
                                 <%- include('../partials/seller-rating', { rating: sellerRating }) %>
                                 <% if (listing.seller_status === 'active') { %>
@@ -207,10 +196,11 @@
                         </div>
                     <% } %>
 
-                    <% if (listing.status === 'active') { %>
+                    <% if (listing.status === 'active' && !listing.is_expired) { %>
                         <% if (!user) { %>
-                            <a href="/login" class="btn btn-outline-primary w-100 mt-3">Войти и написать продавцу</a>
+                            <a href="/login" class="btn btn-outline-primary w-100 mt-3">Войти и написать <%= isService ? 'исполнителю' : 'продавцу' %></a>
                         <% } else if (Number(user.id) !== Number(listing.user_id)) { %>
+                            <% if (!isService) { %>
                             <form action="/listings/<%= listing.id %>/purchase" method="POST" class="mt-3">
                                 <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
                                 <% if (typeof purchaseRequestKey !== 'undefined' && purchaseRequestKey) { %>
@@ -222,15 +212,18 @@
                                 <button type="button" class="btn btn-outline-primary w-100 mt-2" aria-haspopup="dialog"
                                         aria-controls="price-offer-dialog" data-open-price-offer>Предложить свою цену</button>
                             <% } %>
+                            <% } %>
                             <form action="/messages/start" method="POST" class="mt-3">
                                 <input type="hidden" name="_csrf" value="<%= favoritesCsrfToken %>">
                                 <input type="hidden" name="listing_id" value="<%= listing.id %>">
-                                <button type="submit" class="btn btn-outline-primary w-100">Написать продавцу</button>
+                                <button type="submit" class="btn btn-outline-primary w-100">Написать <%= isService ? 'исполнителю' : 'продавцу' %></button>
                             </form>
                         <% } %>
+                        <% if (!isService || listing.seller_phone_public) { %>
                         <button type="button" class="btn btn-primary w-100 mt-3 seller-phone-button"
                                 data-phone-listing="<%= listing.id %>">Показать телефон</button>
                         <div class="mt-2 seller-phone-result" role="status" aria-live="polite"></div>
+                        <% } %>
                     <% } %>
                 </div>
             </div>

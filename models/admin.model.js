@@ -16,14 +16,24 @@ async function paginate(select, from, params, page) {
     return { items, page, pages, total: Number(count.total) };
 }
 
-async function stats() {
-    const [[row]] = await db.query(
+async function counters() {
+    const { openStatuses } = require('./dispute.model');
+    const [[row]] = await db.execute(
         `SELECT (SELECT COUNT(*) FROM users) AS users,
                 (SELECT COUNT(*) FROM listings) AS listings,
                 (SELECT COUNT(*) FROM listings WHERE status='active') AS active,
-                (SELECT COUNT(*) FROM reports WHERE status='open') AS reports`
+                (SELECT COUNT(*) FROM listings WHERE status='pending_review') AS moderation,
+                (SELECT COUNT(*) FROM reports WHERE status='open') AS listingReports,
+                (SELECT COUNT(*) FROM seller_reports WHERE status='open') AS sellerReports,
+                (SELECT COUNT(*) FROM review_reports WHERE resolved_at IS NULL) AS reviewReports,
+                (SELECT COUNT(*) FROM deal_disputes WHERE status IN (?,?)) AS disputes,
+                (SELECT COUNT(*) FROM reviews WHERE moderation_status='pending') AS reviews,
+                (SELECT COUNT(*) FROM admin_logs) AS logs`, openStatuses
     );
-    return row;
+    const counts = Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value)]));
+    counts.reports = counts.listingReports + counts.sellerReports + counts.reviewReports;
+    counts.dashboard = counts.moderation + counts.reports + counts.disputes + counts.reviews;
+    return counts;
 }
 
 async function users(search, page) {
@@ -128,30 +138,38 @@ async function createReport(authorId, listingId, reason, comment) {
     const [result] = await db.execute(
         `INSERT INTO reports(author_id,listing_id,reason,comment)
          SELECT ?,l.id,?,? FROM listings l JOIN users u ON u.id=? AND u.status='active'
-         WHERE l.id=? AND l.user_id<>? AND l.status='active' AND l.moderation_locked=0
+         WHERE l.id=? AND l.user_id<>? AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>UTC_TIMESTAMP(3)) AND l.moderation_locked=0
          ON DUPLICATE KEY UPDATE reports.id=LAST_INSERT_ID(reports.id)`,
         [authorId, reason, comment, authorId, listingId, authorId]
     );
     return result.insertId || null;
 }
 
-async function moderateReview(actorId, dealId, mode, reason, key) {
-    return mutate(actorId, 'review_' + mode, dealId, reason, key, async connection => {
-        const [[review]] = await connection.execute('SELECT hidden_at FROM reviews WHERE deal_id=? FOR UPDATE', [dealId]);
+async function moderateReview(actorId, dealId, version, mode, reason, key) {
+    return mutate(actorId, 'review_' + mode + '_v' + version, dealId, reason, key, async connection => {
+        const [[review]] = await connection.execute(
+            'SELECT moderation_status AS status, moderation_version AS version FROM reviews WHERE deal_id=? FOR UPDATE', [dealId]);
         if (!review) fail('Отзыв не найден.', 404);
-        if (mode === 'hide' && !review.hidden_at) {
-            await connection.execute('UPDATE reviews SET hidden_at=CURRENT_TIMESTAMP(3) WHERE deal_id=?', [dealId]);
-        } else if (mode === 'restore' && review.hidden_at) {
-            await connection.execute('UPDATE reviews SET hidden_at=NULL WHERE deal_id=?', [dealId]);
-        } else if (mode !== 'dismiss') {
-            fail('Видимость отзыва уже изменилась.');
+        if (Number(review.version) !== version) fail('Отзыв изменился. Обновите страницу и проверьте актуальный текст.');
+        const status = mode === 'dismiss' ? review.status : mode === 'approve' ? 'approved' : 'rejected';
+        if (mode !== 'dismiss') {
+            if (status === review.status) fail('Решение по отзыву уже принято.');
+            await connection.execute(
+                `UPDATE reviews SET moderation_status=?, moderation_reason=?, moderation_version=moderation_version+1,
+                    hidden_at=IF(?='approved',NULL,CURRENT_TIMESTAMP(3)) WHERE deal_id=?`,
+                [status, status === 'rejected' ? reason : null, status, dealId]);
+            if (status === 'approved') {
+                await connection.execute(
+                    `INSERT INTO notifications(user_id,event_key,type,text,link)
+                     SELECT seller_id,?,'review','Покупатель оставил отзыв о сделке.',CONCAT('/users/',seller_id,'/reviews')
+                     FROM deals WHERE id=? ON DUPLICATE KEY UPDATE event_key=VALUES(event_key)`, ['review:' + dealId, dealId]);
+            }
         }
         const [reports] = await connection.execute(
             'UPDATE review_reports SET resolved_at=CURRENT_TIMESTAMP(3) WHERE deal_id=? AND resolved_at IS NULL', [dealId]
         );
         if (mode === 'dismiss' && !reports.affectedRows) fail('Открытых жалоб нет.');
-        const hidden = mode === 'hide' || (mode === 'dismiss' && Boolean(review.hidden_at));
-        return { before: { hidden: Boolean(review.hidden_at) }, after: { hidden, resolved: reports.affectedRows } };
+        return { before: review, after: { status, version: version + (mode === 'dismiss' ? 0 : 1), resolved: reports.affectedRows } };
     });
 }
 
@@ -180,4 +198,4 @@ async function decideListing(actorId, listingId, version, mode, reason, key, pho
     });
 }
 
-module.exports = { stats, users, user, listings, reports, logs, mutate, setUserStatus, moderateListing, decideReport, createReport, moderateReview, decideListing };
+module.exports = { counters, users, user, listings, reports, logs, mutate, setUserStatus, moderateListing, decideReport, createReport, moderateReview, decideListing };

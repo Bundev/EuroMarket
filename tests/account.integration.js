@@ -10,11 +10,12 @@ async function run() {
     const db = mysql.createPool({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 3306),
         user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: 'euromarket_test', connectionLimit: 6 });
     const users = [];
-    let server, category, country, createdCountry, createdFeedCountry, subscriberFixture, savedChild, savedCity;
+    let server, category, country, createdCountry, createdFeedCountry, subscriberFixture, savedChild, savedCity, attributeRoot, attributeOther;
+    let serviceRoot, serviceBranch;
     try {
         assert.equal((await db.query('SELECT DATABASE() AS name'))[0][0].name, 'euromarket_test');
         const applyMigrations = require('./apply-migrations');
-        const migrations = ['011_deal_notifications.sql', '012_deal_events.sql', '013_deal_disputes.sql', '014_seller_follows.sql', '015_saved_searches.sql', '016_recently_viewed.sql', '017_listing_price_history.sql', '018_price_negotiations.sql'];
+        const migrations = ['011_deal_notifications.sql', '012_deal_events.sql', '013_deal_disputes.sql', '014_seller_follows.sql', '015_saved_searches.sql', '016_recently_viewed.sql', '017_listing_price_history.sql', '018_price_negotiations.sql', '019_fix_price_history_currency_collation.sql', '020_seller_trust.sql', '021_listing_attributes.sql', '022_saved_search_attributes.sql', '023_listing_lifecycle.sql'];
         await applyMigrations(db, migrations);
         await applyMigrations(db, migrations);
         let rejectedEvent;
@@ -49,13 +50,13 @@ async function run() {
             createdCountry = true;
         }
         category = (await db.execute("INSERT INTO categories(slug,name) VALUES (?,'Account test')", [key]))[0].insertId;
-        for (const role of ['user','user','user','admin']) {
+        for (const role of ['user','user','user','admin','user']) {
             const index = users.length;
             const [row] = await db.execute("INSERT INTO users(name,email,password_hash,role) VALUES (?,?, 'test-only',?)",
                 ['Account ' + index, key + '-' + index + '@example.invalid', role]);
             users.push({ id: row.insertId });
         }
-        const [seller,buyer,other,admin] = users;
+        const [seller,buyer,other,admin,serviceBuyer] = users;
         async function listing(title, status) {
             return (await db.execute("INSERT INTO listings(user_id,category_id,country_id,title,description,price,currency,status) VALUES (?,?,?,?,'Test',25,'EUR',?)",
                 [seller.id, category, country, title, status]))[0].insertId;
@@ -282,7 +283,7 @@ async function run() {
         await request(seller, '/admin/disputes', 403);
         const queue = (await request(admin, '/admin/disputes?status=open&reason=not_delivered&deal=' + accepted.id, 200)).html;
         assert.ok(queue.includes('href="' + activeDispute + '"'));
-        assert.match(queue, /data-open-disputes>[1-9]\d*</);
+        assert.match(queue, /data-admin-count="disputes"[^>]*>[1-9]\d*</);
         const disputeNotices = async id => (await db.execute(
             "SELECT id,user_id FROM notifications WHERE link=? AND event_key LIKE 'dispute:%' ORDER BY id", ['/disputes/' + id]))[0];
         const openingNotices = await disputeNotices(activeDisputeId);
@@ -386,11 +387,37 @@ async function run() {
         await saveReview(winner, accepted.id, 400, { rating: '6' });
         await saveReview(winner, accepted.id, 400, { comment: 'a'.repeat(1501) });
         const marker = '<em>Тест экранирования</em>';
+        const reviewAdminUrl = '/admin/reviews/' + accepted.id;
+        const decideReview = (dealId, version, mode, status = 303, reason = '', token = admin.token, key = crypto.randomUUID()) =>
+            request(admin, '/admin/reviews/' + dealId, status, { mode, version, reason, request_key: key }, token);
+        const adminBadge = (html, name) => Number(html.match(new RegExp('data-admin-count="' + name + '"[^>]*>(\\d+)'))?.[1]);
+        const adminBefore = (await request(admin, '/admin/reviews', 200)).html;
+        const countsBefore = await require('../models/admin.model').counters();
+        for (const name of ['dashboard','users','listings','moderation','reports','disputes','reviews','logs']) {
+            assert.equal(adminBadge(adminBefore, name), countsBefore[name]);
+        }
+        if (!countsBefore.reviews) assert.match(adminBefore, /Нет отзывов, ожидающих проверки/);
         const attempts = await Promise.all([
             saveReview(winner, accepted.id, undefined, { comment: marker }),
             saveReview(winner, accepted.id, undefined, { comment: marker })
         ]);
         assert.deepEqual(attempts.map(result => result.status).sort(), [303,409]);
+        assert.doesNotMatch((await request({}, sellerReviews, 200)).html, /Тест экранирования/);
+        const pendingReviews = (await request(admin, '/admin/reviews', 200)).html;
+        assert.equal(adminBadge(pendingReviews, 'reviews'), countsBefore.reviews + 1);
+        assert.match(pendingReviews, /&lt;em&gt;Тест экранирования&lt;\/em&gt;/);
+        const reviewContent = pendingReviews.slice(pendingReviews.indexOf('<h1'));
+        assert.ok(!/Открытые жалобы|Жалобы на продавцов|\/admin\/reports\/reviews/.test(reviewContent), 'Review content contains a complaint control');
+        await request(stranger, reviewAdminUrl, 403);
+        await decideReview(accepted.id, 0, 'reject', 400);
+        await decideReview(accepted.id, 0, 'approve', 403, '', '');
+        const firstApprovalKey = crypto.randomUUID();
+        const concurrentReviewDecisions = await Promise.all([
+            request(admin, reviewAdminUrl, undefined, { mode:'approve', version:0, request_key:firstApprovalKey }),
+            request(admin, reviewAdminUrl, undefined, { mode:'approve', version:0, request_key:crypto.randomUUID() })
+        ]);
+        assert.deepEqual(concurrentReviewDecisions.map(result => result.status).sort(), [303,409]);
+        assert.equal(adminBadge((await request(admin, '/admin/reviews', 200)).html, 'reviews'), countsBefore.reviews);
         const [[notice]] = await db.execute("SELECT id,link FROM notifications WHERE user_id=? AND event_key=? AND type='review'",
             [seller.id, 'review:' + accepted.id]);
         assert.equal(notice.link, sellerReviews);
@@ -401,6 +428,9 @@ async function run() {
         assert.doesNotMatch(publishedReview,/<em>Тест экранирования<\/em>/);
         assert.match(publishedReview,/5 \/ 5 · отзывов: 1/);
         await saveReview(winner, accepted.id, 303, { mode:'edit', rating:'4', comment:marker });
+        assert.doesNotMatch((await request({},sellerReviews,200)).html,/Тест экранирования/);
+        await decideReview(accepted.id, 0, 'approve', 409);
+        await decideReview(accepted.id, 2, 'approve');
         assert.match((await request({},sellerReviews,200)).html,/4 \/ 5 · отзывов: 1/);
         await db.execute('UPDATE reviews SET created_at=DATE_SUB(NOW(), INTERVAL 8 DAY) WHERE deal_id=?', [accepted.id]);
         await saveReview(winner, accepted.id, 409, { mode:'edit', rating:'1' });
@@ -413,6 +443,7 @@ async function run() {
             buyer_confirmed_at,seller_confirmed_at,completed_at) VALUES (?,?,?,25,'EUR','completed',NOW(),NOW(),NOW())`,
             [secondListing, stranger.id, seller.id]);
         await saveReview(stranger, secondDeal.insertId, 303, { rating:'1' });
+        await decideReview(secondDeal.insertId, 0, 'approve');
         assert.match((await request({},sellerReviews,200)).html,/2,5 \/ 5 · отзывов: 2/);
         assert.match((await request({},'/listing/' + spare + '/cancellation',200)).html,/2,5 \/ 5 · отзывов: 2/);
         const rated = (await request({},'/listing/' + spare + '/cancellation',200)).html;
@@ -431,24 +462,27 @@ async function run() {
         await request(seller, reportUrl, 303, { reason:'Requires moderator review' });
         await request(seller, reportUrl, 409, { reason:'Duplicate' });
         await request(stranger, '/admin/reviews', 403);
-        await request(stranger, adminUrl, 403, { mode:'hide', reason:'Test', request_key:crypto.randomUUID() });
-        assert.match((await request(admin,'/admin/reviews',200)).html,/Жалобы \(открытых: 1\)/);
-        assert.match((await request(admin,adminUrl + '/reports',200)).html,/Requires moderator review/);
-        await request(admin, adminUrl, 403, { mode:'hide', reason:'Test', request_key:crypto.randomUUID() }, '');
-        const moderation = mode => request(admin, adminUrl, 303, { mode, reason:'Test', request_key:crypto.randomUUID() });
-        await moderation('hide');
+        await request(stranger, adminUrl, 403, { mode:'reject', version:3, reason:'Test', request_key:crypto.randomUUID() });
+        assert.match((await request(admin,'/admin/reports/reviews',200)).html, new RegExp('Жалобы на отзыв №' + accepted.id));
+        const complaintsPage = '/admin/reports/reviews/' + accepted.id;
+        assert.equal((await request(admin, adminUrl + '/reports', 302)).headers.get('location'), complaintsPage);
+        assert.match((await request(admin, complaintsPage, 200)).html,/Requires moderator review/);
+        const rejectionKey = crypto.randomUUID();
+        await decideReview(accepted.id, 3, 'reject', 303, 'Test', admin.token, rejectionKey);
+        await decideReview(accepted.id, 3, 'reject', 303, 'Test', admin.token, rejectionKey);
+        assert.match((await request(admin,'/admin/reviews?filter=rejected',200)).html,/Причина отклонения:<\/strong> Test/);
         const afterHide = (await request({},sellerReviews,200)).html;
         assert.match(afterHide,/1 \/ 5 · отзывов: 1/);
         assert.match((await request({}, publicProfile, 200)).html, /1 \/ 5 · отзывов: 1/);
         assert.doesNotMatch(afterHide,/&lt;em&gt;/);
-        assert.match((await request(winner,'/my-purchases',200)).html,/Отзыв скрыт модератором/);
-        assert.match((await request(admin,adminUrl + '/reports',200)).html,/Закрыта/);
-        assert.equal((await db.execute("SELECT COUNT(*) AS total FROM admin_logs WHERE action='review_hide' AND admin_id=? AND target_id=?",
+        assert.match((await request(winner,'/my-purchases',200)).html,/Отзыв отклонён/);
+        assert.match((await request(admin,complaintsPage,200)).html,/Закрыта/);
+        assert.equal((await db.execute("SELECT COUNT(*) AS total FROM admin_logs WHERE action='review_reject_v3' AND admin_id=? AND target_id=?",
             [admin.id, accepted.id]))[0][0].total,1);
-        await moderation('restore');
+        await decideReview(accepted.id, 4, 'approve');
         assert.match((await request({},sellerReviews,200)).html,/2,5 \/ 5 · отзывов: 2/);
         await request(stranger, reportUrl, 303, { reason:'Another complaint' });
-        await moderation('dismiss');
+        await request(admin, complaintsPage, 303, { mode:'dismiss', version:5, reason:'Test', request_key:crypto.randomUUID() });
         assert.match((await request({},sellerReviews,200)).html,/2,5 \/ 5 · отзывов: 2/);
         await start(other,item,404);
         const spareKey = crypto.randomUUID();
@@ -482,13 +516,17 @@ async function run() {
             const [deal] = await db.execute(`INSERT INTO deals(listing_id,buyer_id,seller_id,price,currency,status,
                 buyer_confirmed_at,seller_confirmed_at,completed_at) VALUES (?,?,?,25,'EUR','completed',NOW(),NOW(),NOW())`,
                 [listingId,buyer.id,seller.id]);
-            await db.execute('INSERT INTO reviews (deal_id,rating,comment) VALUES (?,5,?)', [deal.insertId, 'Pagination review ' + i]);
+            await db.execute("INSERT INTO reviews (deal_id,rating,comment,moderation_status) VALUES (?,5,?,'approved')", [deal.insertId, 'Pagination review ' + i]);
         }
         const reviewPageOne = (await request({},sellerReviews,200)).html;
         const reviewPageTwo = (await request({},sellerReviews + '?page=2',200)).html;
         assert.equal((reviewPageOne.match(/<article class="card card-body mb-3">/g) || []).length, 20);
         assert.equal((reviewPageTwo.match(/<article class="card card-body mb-3">/g) || []).length, 2);
         assert.match(reviewPageTwo,/Страница 2 из 2/);
+        const approvedOne = (await request(admin,'/admin/reviews?filter=approved',200)).html;
+        const approvedTwo = (await request(admin,'/admin/reviews?filter=approved&page=2',200)).html;
+        assert.equal((approvedOne.match(/Детали отзыва/g) || []).length, 20);
+        assert.match(approvedTwo,/Страница 2 из/);
         const seoTitle = 'Городской велосипед +380501234567 buyer@example.invalid';
         const seoId = await listing(seoTitle, 'active');
         const privateId = await listing('SEO private draft', 'draft');
@@ -792,6 +830,20 @@ async function run() {
         const compare = await request({}, comparePath, 200);
         assert.match(compare.html, /Current version/);
         assert.equal((compare.html.match(/data-remove-comparison=/g) || []).length, 1);
+        const comparisonPreview = await request(buyer, '/compare?ids=' + [candidate, expensive, abroad, cheap].join(','), 200);
+        assert.match(comparisonPreview.html, /Цены указаны в исходных валютах/);
+        assert.match(comparisonPreview.html, /data-compare-differences/);
+        assert.match(comparisonPreview.html, /data-compare-clear/);
+        assert.match(comparisonPreview.html, /compare-difference/);
+        assert.ok(comparisonPreview.html.includes(publicPhoto));
+        assert.equal((comparisonPreview.html.match(/data-remove-comparison=/g) || []).length, 4);
+        for (const url of ['/', '/search', categoryUrl, '/recommendations', '/favorites',
+            (await request(buyer, candidatePath, 301)).headers.get('location')]) {
+            const compareSurface = await request(buyer, url, 200);
+            assert.match(compareSurface.html, /data-compare-id=/, url);
+            assert.match(compareSurface.html, /data-header-compare/, url);
+            assert.doesNotMatch(compareSurface.html, /data-compare-bar|data-compare-clear/, url);
+        }
         await start(buyer,candidate,303);
         await request(buyer, '/messages/start', 303, { listing_id: candidate });
         const ownerCardPath = '/my-listings?q=' + encodeURIComponent('Current version');
@@ -799,7 +851,7 @@ async function run() {
         assert.deepEqual(cardMetrics((await request(buyer, ownerCardPath + '&user_id=' + seller.id, 200)).html), []);
         await recordView(buyer, candidate);
         assert.ok((await historyIds(buyer)).includes(candidate));
-        await request(seller,candidatePath + '/edit',302,{ ...edit('Private pending edit'), price: '30', item_condition: 'Like new' });
+        await request(seller,candidatePath + '/edit',302,{ ...edit('Private pending edit'), price: '30', attr_condition: 'like_new' });
         assert.equal((await currentReview()).status,'pending_review');
         assert.deepEqual(cardMetrics((await request(seller, '/my-listings?status=pending_review&q=Private+pending+edit', 200)).html), [1, 1, 1]);
         assert.doesNotMatch((await request({}, comparePath, 200)).html, /Private pending edit|Current version/);
@@ -840,7 +892,7 @@ async function run() {
         assert.deepEqual(await publicationNotices(candidate), sellerPublication);
         assert.deepEqual(await priceHistory(), [{ price: '35.00', is_drop: 0 }, { price: '30.00', is_drop: 1 }]);
         const finalComparison = await request({}, comparePath, 200);
-        assert.match(finalComparison.html, /Like new/);
+        assert.match(finalComparison.html, /Как новое/);
         const priceNotices = (await db.execute("SELECT user_id FROM notifications WHERE event_key LIKE ?", ['price-drop:' + candidate + ':%']))[0];
         assert.deepEqual(priceNotices, [{ user_id: buyer.id }]);
         await move(seller,(await rows(candidate))[0].id,'accept',303);
@@ -894,7 +946,7 @@ async function run() {
         await request(buyer, savedPath, 400, { ...savedFilters, country_id: feedCountry.id });
         await request(buyer, savedPath, 400, { ...savedFilters, currency: '' });
         const saves = await Promise.all([request(buyer, savedPath, 303, savedFilters),
-            request(buyer, savedPath, 303, { ...savedFilters, sort: 'newest', page: '1' })]);
+            request(buyer, savedPath, 303, { ...savedFilters, page: '1' })]);
         assert.equal(saves[0].headers.get('location'), savedPath);
         const [savedRows] = await db.execute('SELECT id,name,notify FROM saved_searches WHERE user_id=?', [buyer.id]);
         assert.equal(savedRows.length, 1);
@@ -905,7 +957,8 @@ async function run() {
         assert.equal(opened.pathname, '/search');
         assert.equal(opened.searchParams.get('city_id'), String(savedCity));
         assert.equal(opened.searchParams.get('min_price'), '24.50');
-        assert.ok(!opened.searchParams.has('sort') && !opened.searchParams.has('page'));
+        assert.equal(opened.searchParams.get('sort'), 'price_desc');
+        assert.ok(!opened.searchParams.has('page'));
         await request(other, openSaved, 404);
         await request(other, editSaved, 404, { intent: 'delete' });
         await request(buyer, editSaved, 403, { intent: 'update', name: 'Blocked by CSRF' }, '');
@@ -927,7 +980,7 @@ async function run() {
         assert.deepEqual(await savedNotices(savedListing), []);
         assert.equal((await Promise.all([jobs.processBatch(), jobs.processBatch()])).filter(Boolean).length, 1);
         const deliveredSaved = await savedNotices(savedListing);
-        assert.deepEqual(deliveredSaved.map(item => item.user_id).sort(), [seller.id, buyer.id].sort());
+        assert.deepEqual(deliveredSaved.map(item => item.user_id), [buyer.id]);
         assert.equal(deliveredSaved[0].link, '/listings/' + savedListing);
         assert.match(deliveredSaved[0].text, /Saved match in a child category.*25\.00 EUR/);
         const recPath = '/recommendations';
@@ -1101,6 +1154,7 @@ async function run() {
         await request(buyer, '/offers', 404, offerData);
         const negotiableEdit = { title: 'Negotiation fixture', description: 'Test', price: '25',
             country_id: country, category_id: category };
+        await request(seller, '/listings/' + negotiable + '/edit', 400, { ...negotiableEdit, bargaining_enabled: 'invalid' });
         await request(seller, '/listings/' + negotiable + '/edit', 302, { ...negotiableEdit, bargaining_enabled: '1' });
         const [[editedOfferListing]] = await db.execute('SELECT bargaining_enabled,status,review_version FROM listings WHERE id=?', [negotiable]);
         assert.equal(editedOfferListing.bargaining_enabled, 1);
@@ -1148,11 +1202,315 @@ async function run() {
         assert.deepEqual(offerNotices.map(row => row.user_id), [seller.id, buyer.id, seller.id]);
         await request(seller, '/notifications/' + offerNotices[0].id + '/open', 302);
         await request(other, '/notifications/' + offerNotices[0].id + '/open', 404);
-        await request(seller, '/listings/' + negotiable + '/edit', 302, { ...negotiableEdit, bargaining_enabled: '0' });
-        const [[disabledOfferListing]] = await db.execute('SELECT bargaining_enabled,review_version FROM listings WHERE id=?', [negotiable]);
+        await request(seller, '/listings/' + negotiable + '/edit', 302, { ...negotiableEdit, description: 'Updated negotiation fixture',
+            price: '24.50', attr_condition: 'good', bargaining_enabled: '0' });
+        const [[disabledOfferListing]] = await db.execute(
+            'SELECT bargaining_enabled,review_version,description,price,currency,category_id,country_id,item_condition FROM listings WHERE id=?', [negotiable]);
         assert.equal(disabledOfferListing.bargaining_enabled, 0);
+        assert.deepEqual(disabledOfferListing, { bargaining_enabled: 0, review_version: disabledOfferListing.review_version,
+            description: 'Updated negotiation fixture', price: '24.50', currency: 'EUR', category_id: category,
+            country_id: country, item_condition: null });
         await request(admin, '/admin/moderation/' + negotiable, 303, form(disabledOfferListing.review_version,'approve'));
         assert.doesNotMatch((await request(buyer, negotiablePath, 200)).html, /data-open-price-offer/);
+
+        const sms = require('../services/phoneSms');
+        const rateKey = crypto.randomBytes(32);
+        const previousSms = { configuration: sms.configuration, send: sms.send };
+        const phone = '+49' + String(crypto.randomInt(1000000000)).padStart(9, '0');
+        const secondPhone = '+48' + phone.slice(3);
+        const receivedCodes = new Map();
+        const sendCode = '/profile/phone/verification/send';
+        const confirmCode = '/profile/phone/verification/confirm';
+        const badge = /title="Телефон подтверждён"/;
+        try {
+            for (const user of [seller, buyer]) await request(user, '/profile/phone', 303, { phone });
+            assert.match((await request(seller, '/profile', 200)).html, /id="phone-code"/);
+            await request({}, sendCode, 302, {});
+            await request(seller, sendCode, 403, {}, '');
+            sms.configuration = () => null;
+            await request(seller, sendCode, 503, {});
+            assert.doesNotMatch((await request({}, publicProfile, 200)).html, badge);
+            sms.configuration = () => ({ key: rateKey });
+            sms.send = async (_, recipient, code) => { receivedCodes.set(recipient, code); };
+            await request(seller, sendCode, 303, {});
+            const code = receivedCodes.get(phone);
+            assert.match(code, /^\d{6}$/);
+            assert.match((await request(seller, sendCode, 429, {})).headers.get('retry-after'), /^\d+$/);
+            const wrongCode = code === '000000' ? '111111' : '000000';
+            await request(seller, confirmCode, 422, { code: wrongCode });
+            await request(seller, confirmCode, 303, { code });
+            await request(seller, confirmCode, 422, { code });
+            const verifiedProfile = (await request({}, publicProfile, 200)).html;
+            assert.match(verifiedProfile, badge);
+            assert.ok(!verifiedProfile.includes(phone));
+            assert.match((await request({}, negotiablePath, 200)).html, badge);
+            await request(buyer, sendCode, 303, {});
+            await request(buyer, confirmCode, 422, { code: receivedCodes.get(phone) });
+            await request(seller, '/profile/phone', 303, { phone, phone_public: '1' });
+            assert.match((await request({}, publicProfile, 200)).html, badge);
+            await request(seller, '/profile/phone', 303, { phone: secondPhone });
+            assert.doesNotMatch((await request({}, publicProfile, 200)).html, badge);
+            // Use a different account to exercise expiry and attempt cap without bypassing its resend budget.
+            await request(other, '/profile/phone', 303, { phone: secondPhone });
+            await request(other, sendCode, 303, {});
+            const otherCode = receivedCodes.get(secondPhone);
+            const otherWrong = otherCode === '000000' ? '111111' : '000000';
+            for (let i = 0; i < 5; i++) await request(other, confirmCode, 422, { code: otherWrong });
+            await request(other, confirmCode, 422, { code: otherCode });
+            const [[attempts]] = await db.execute('SELECT attempts FROM phone_verifications WHERE user_id=?', [other.id]);
+            assert.equal(attempts.attempts, 5);
+            await db.execute('UPDATE phone_verifications SET attempts=0,expires_at=CURRENT_TIMESTAMP(3)-INTERVAL 1 SECOND WHERE user_id=?', [other.id]);
+            await request(other, confirmCode, 422, { code: otherCode });
+            await request(other, '/profile/phone', 303, { phone });
+            assert.equal((await db.execute('SELECT 1 FROM phone_verifications WHERE user_id=?', [other.id]))[0].length, 0);
+        } finally {
+            Object.assign(sms, previousSms);
+            for (const action of ['send', 'confirm']) {
+                for (const [scope, values] of Object.entries({ resend: [seller.id, buyer.id, other.id],
+                    account: [seller.id, buyer.id, other.id], phone: [phone, secondPhone], ip: ['127.0.0.1'] })) {
+                    for (const value of values) {
+                        const digest = crypto.createHmac('sha256', rateKey).update(JSON.stringify(['phone-rate', action, scope, value])).digest('hex');
+                        await db.execute('DELETE FROM auth_rate_limits WHERE key_hash=?', [digest]);
+                    }
+                }
+            }
+        }
+        const reportPath = publicProfile + '/report';
+        await request({}, reportPath, 302, { reason: 'fraud' });
+        await request(seller, reportPath, 400, { reason: 'fraud' });
+        await request(buyer, reportPath, 403, { reason: 'fraud' }, '');
+        await request(buyer, reportPath, 303, { reason: 'fraud', comment: '<b>Trust fixture</b>' });
+        await request(buyer, reportPath, 409, { reason: 'fraud' });
+        await request(seller, '/admin/seller-reports', 403);
+        const reportQueue = (await request(admin, '/admin/seller-reports', 200)).html;
+        assert.match(reportQueue, /&lt;b&gt;Trust fixture&lt;\/b&gt;/);
+        const [[reportRow]] = await db.execute('SELECT id FROM seller_reports WHERE author_id=? AND seller_id=?', [buyer.id, seller.id]);
+        const reportAction = '/admin/seller-reports/' + reportRow.id;
+        const resolution = { status: 'accepted', reason: 'Reviewed test report', request_key: crypto.randomUUID() };
+        await request(buyer, reportAction, 403, resolution);
+        await request(admin, reportAction, 403, resolution, '');
+        await request(admin, reportAction, 303, resolution);
+        assert.match((await request(admin, '/admin/seller-reports?status=accepted', 200)).html, /Trust fixture/);
+        const [[audit]] = await db.execute('SELECT action FROM admin_logs WHERE action_key=?', [resolution.request_key]);
+        assert.equal(audit.action, 'seller_report_accepted');
+        const [[reportedSeller]] = await db.execute('SELECT status FROM users WHERE id=?', [seller.id]);
+        assert.equal(reportedSeller.status, 'active');
+        assert.doesNotMatch((await request(seller, publicProfile, 200)).html, /Trust fixture/);
+
+        let [[vehicles]] = await db.execute("SELECT id FROM categories WHERE slug='vehicles' AND is_active=1");
+        if (!vehicles) {
+            const [root] = await db.execute("INSERT INTO categories(slug,name) VALUES ('vehicles','Vehicles fixture')");
+            attributeRoot = root.insertId;
+            vehicles = { id: attributeRoot };
+        }
+        await db.execute('UPDATE categories SET parent_id=? WHERE id=?', [vehicles.id, category]);
+        const [otherCategory] = await db.execute("INSERT INTO categories(slug,name) VALUES (?,'Other fixture')", [key + '-other']);
+        attributeOther = otherCategory.insertId;
+        const attrFields = { title: 'Structured fixture', description: 'Unstructured detail XYZ', price: '42',
+            country_id: country, category_id: category, bargaining_enabled: '1', attributes_form: '1',
+            attr_car_brand: 'Sample brand', attr_car_model: 'Sample model', attr_car_year: '2022',
+            attr_car_mileage: '16000', attr_car_fuel: 'Гибрид', attr_car_gearbox: 'Автоматическая', attr_condition: 'Хорошее' };
+        async function createWithAttributes(fields, status) {
+            const body = new FormData();
+            for (const [key, value] of Object.entries(fields)) body.append(key, String(value));
+            const response = await fetch(base + '/listings', { method: 'POST', headers: { cookie: seller.cookie, 'X-CSRF-Token': seller.token },
+                body, redirect: 'manual' });
+            assert.equal(response.status, status);
+            return Number(response.headers.get('location')?.split('=')[1]);
+        }
+        await createWithAttributes({ ...attrFields, attr_car_year: '1700' }, 400);
+        const structured = await createWithAttributes(attrFields, 302);
+        const structuredPath = '/listings/' + structured;
+        const savedAttributes = new URLSearchParams({ category_id: category, country_id: country, currency: 'EUR',
+            sort: 'price_desc', attr_car_mileage_min: '16000', attr_car_mileage_max: '16000', attr_car_brand: 'Sample brand' });
+        savedAttributes.append('attr_car_fuel', 'Гибрид');
+        savedAttributes.append('attr_car_fuel', 'Бензин');
+        const [[quotaFixture]] = await db.execute('SELECT CAST(id AS CHAR) AS id FROM saved_searches WHERE user_id=? ORDER BY id DESC LIMIT 1', [other.id]);
+        await request(other, savedPath + '/' + quotaFixture.id, 303, { intent: 'delete' });
+        await request(other, savedPath, 303, savedAttributes);
+        await request(seller, savedPath, 303, savedAttributes);
+        const [[structuredSaved]] = await db.execute('SELECT CAST(id AS CHAR) AS id,attribute_query FROM saved_searches WHERE user_id=? AND attribute_query IS NOT NULL', [other.id]);
+        const structuredOpen = '/saved-searches/' + structuredSaved.id + '/open';
+        const structuredUrl = new URL((await request(other, structuredOpen + '?edit=1', 302)).headers.get('location'), base);
+        assert.equal(structuredUrl.searchParams.get('sort'), 'price_desc');
+        assert.deepEqual(structuredUrl.searchParams.getAll('attr_car_fuel'), ['Бензин','Гибрид']);
+        await request(buyer, structuredUrl.pathname + structuredUrl.search, 404);
+        const editedCriteria = new URLSearchParams(savedAttributes);
+        editedCriteria.set('saved_search_id', structuredSaved.id);
+        editedCriteria.set('name', 'Structured saved');
+        await request(other, savedPath, 303, editedCriteria);
+        assert.match((await request(other, savedPath, 200)).html, /Пробег/);
+        assert.equal((await db.execute('SELECT COUNT(*) AS total FROM listing_attributes WHERE listing_id=?', [structured]))[0][0].total, 7);
+        assert.match((await request(seller, structuredPath + '/edit', 200)).html, /value="Sample brand"/);
+        await request(seller, structuredPath + '/publish', 302, {});
+        const approveStructured = async () => {
+            const [[row]] = await db.execute('SELECT review_version FROM listings WHERE id=?', [structured]);
+            await request(admin, '/admin/moderation/' + structured, 303, form(row.review_version, 'approve'));
+        };
+        await approveStructured();
+        for (let batch = 0; batch < 30 && await jobs.processBatch(); batch++) {}
+        assert.deepEqual((await savedNotices(structured)).map(row => row.user_id), [other.id]);
+        assert.equal(await jobs.processBatch(), false);
+        assert.equal((await savedNotices(structured)).length, 1);
+        assert.deepEqual(cardIds((await request(other, structuredUrl.pathname + structuredUrl.search, 200)).html), [structured]);
+        assert.equal(cardIds((await request(other, '/recommendations?country=DE', 200)).html)[0], structured);
+        await db.execute("UPDATE saved_searches SET attribute_query='attr_removed=1' WHERE id=?", [structuredSaved.id]);
+        assert.match((await request(other, savedPath, 200)).html, /Условия устарели/);
+        const staleUrl = (await request(other, structuredOpen, 302)).headers.get('location');
+        await request(other, staleUrl, 400);
+        await db.execute('UPDATE saved_searches SET attribute_query=? WHERE id=?', [structuredSaved.attribute_query, structuredSaved.id]);
+        const structuredCanonical = (await request(buyer, structuredPath, 301)).headers.get('location');
+        assert.match((await request(buyer, structuredCanonical, 200)).html, /16000 км/);
+        const combined = new URLSearchParams({ category_id: category, country_id: country, currency: 'EUR', min_price: '40',
+            attr_car_mileage_min: '14000', attr_car_mileage_max: '17000', attr_car_brand: 'Sample brand', sort: 'price_desc' });
+        combined.append('attr_car_fuel', 'Бензин');
+        combined.append('attr_car_fuel', 'Гибрид');
+        assert.deepEqual(cardIds((await request(buyer, '/search?' + combined, 200)).html), [structured]);
+        assert.deepEqual(cardIds((await request(buyer, '/category/vehicles?' + combined, 200)).html), [structured]);
+        await request(buyer, '/search?' + combined + '&attr_car_year_min=2100&attr_car_year_max=2025', 400);
+        const [[foreignField]] = await db.execute("SELECT COUNT(*) AS total FROM listing_attributes WHERE listing_id=? AND field_key='device_brand'", [structured]);
+        assert.equal(foreignField.total, 0);
+        const compareStructured = (await request(buyer, '/compare?ids=' + structured + ',' + cheap, 200)).html;
+        assert.match(compareStructured, /Sample brand/);
+        assert.doesNotMatch(compareStructured, /Unstructured detail XYZ/);
+        const matchingIds = [];
+        for (let index = 0; index < 20; index++) matchingIds.push(await listing('Attribute batch ' + index, 'active'));
+        await db.query("INSERT INTO listing_attributes(listing_id,field_key,text_value) VALUES ?", [
+            matchingIds.map(id => [id, 'car_brand', 'Sample brand'])
+        ]);
+        const similarStructured = (await request(buyer, structuredCanonical, 200)).html.match(/aria-labelledby="similar-title"[\s\S]*?<\/section>/)[0];
+        assert.equal(cardIds(similarStructured).length, 4);
+        assert.ok(cardIds(similarStructured).every(id => matchingIds.includes(id)));
+        const pagedAttributes = '/search?category_id=' + category + '&attr_car_brand=Sample+brand&sort=oldest';
+        const attributeFirst = (await request(buyer, pagedAttributes, 200)).html;
+        assert.equal(cardIds(attributeFirst).length, 20);
+        assert.match(attributeFirst, /attr_car_brand=Sample\+brand&amp;page=2|attr_car_brand=Sample\+brand&amp;sort=oldest&amp;page=2/);
+        const attributeSecond = cardIds((await request(buyer, pagedAttributes + '&page=2', 200)).html);
+        assert.equal(attributeSecond.length, 1);
+        assert.ok(!cardIds(attributeFirst).includes(attributeSecond[0]));
+        const conditionFilter = '/search?category_id=' + category + '&attr_condition=good&search=Structured+fixture';
+        assert.deepEqual(cardIds((await request(buyer, conditionFilter, 200)).html), [structured]);
+        assert.equal((await db.execute("SELECT text_value FROM listing_attributes WHERE listing_id=? AND field_key='condition'", [structured]))[0][0].text_value, 'good');
+        await db.execute("UPDATE listing_attributes SET text_value='Хорошее' WHERE listing_id=? AND field_key='condition'", [structured]);
+        assert.deepEqual(cardIds((await request(buyer, conditionFilter, 200)).html), [structured]);
+        assert.match((await request(seller, structuredPath + '/edit', 200)).html, /value="good" selected/);
+        await request(seller, structuredPath + '/edit', 400, { ...attrFields, attr_condition: 'Произвольное значение' });
+        await request(seller, structuredPath + '/edit', 302, { ...attrFields, attr_car_mileage: '16100' });
+        await request(buyer, structuredCanonical, 404);
+        assert.doesNotMatch((await request(buyer, '/compare?ids=' + structured, 200)).html, /16100|Sample brand/);
+        await approveStructured();
+        assert.match((await request(buyer, structuredCanonical, 200)).html, /16100 км/);
+        await request(seller, structuredPath + '/edit', 302, { ...attrFields, category_id: attributeOther, attr_condition: '', attr_device_brand: 'Ignored' });
+        assert.equal((await db.execute('SELECT COUNT(*) AS total FROM listing_attributes WHERE listing_id=?', [structured]))[0][0].total, 0);
+        await approveStructured();
+        assert.match((await request(buyer, '/compare?ids=' + structured + ',' + cheap, 200)).html, /Товары из разных категорий/);
+        await db.execute("UPDATE listings SET item_condition='Редкое старое состояние' WHERE id=?", [structured]);
+        assert.match((await request(seller, structuredPath + '/edit', 200)).html, /Прежнее значение: «Редкое старое состояние»/);
+        const replacement = { ...attrFields, category_id: attributeOther, attr_condition: 'parts' };
+        await request(seller, structuredPath + '/edit', 302, replacement);
+        await approveStructured();
+        const renewedCondition = (await request(buyer, '/compare?ids=' + structured, 200)).html;
+        assert.match(renewedCondition, /На запчасти \/ неисправное/);
+        assert.doesNotMatch(renewedCondition, /Редкое старое состояние/);
+
+        const lifecycle = require('../models/listingLifecycle.model');
+        const lifecyclePath = '/my-listings/lifecycle';
+        const seasonal = await listing('Lifecycle fixture', 'draft');
+        const seasonalPath = '/listings/' + seasonal;
+        const state = async () => (await db.execute(
+            'SELECT status,published_at,expires_at,bumped_at,created_at,review_version FROM listings WHERE id=?', [seasonal]))[0][0];
+        const approveSeasonal = async () => request(admin, '/admin/moderation/' + seasonal, 303, form((await state()).review_version,'approve'));
+        const action = (name, id = seasonal) => ({ action: name, ids: id, request_key: crypto.randomUUID() });
+        assert.equal((await state()).published_at, null);
+        await request(seller, seasonalPath + '/publish', 302, {});
+        await approveSeasonal();
+        const published = await state();
+        assert.equal((published.expires_at - published.published_at) / 86400000, 30);
+        await request(seller, seasonalPath + '/edit', 302, edit('Lifecycle revised'));
+        await approveSeasonal();
+        assert.deepEqual((await state()).expires_at, published.expires_at);
+        await request(seller, lifecyclePath, 403, action('renew'), '');
+        await request(buyer, lifecyclePath, 303, action('renew'));
+        assert.deepEqual((await state()).expires_at, published.expires_at);
+        const renew = action('renew');
+        await Promise.all([request(seller, lifecyclePath, 303, renew), request(seller, lifecyclePath, 303, renew)]);
+        const renewed = await state();
+        assert.equal((renewed.expires_at - published.expires_at) / 86400000, 30);
+        await request(seller, lifecyclePath, 303, action('renew'));
+        assert.deepEqual((await state()).expires_at, renewed.expires_at);
+        await request(seller, lifecyclePath, 409, { ...renew, action: 'bump' });
+        await Promise.all([request(seller, lifecyclePath, 303, action('bump')), request(seller, lifecyclePath, 303, action('bump'))]);
+        const bumped = await state();
+        assert.ok(bumped.bumped_at);
+        assert.deepEqual(bumped.created_at, published.created_at);
+        await request(seller, lifecyclePath, 303, action('bump'));
+        assert.deepEqual((await state()).bumped_at, bumped.bumped_at);
+        assert.equal(cardIds((await request(buyer, '/search?category_id=' + category + '&sort=newest', 200)).html)[0], seasonal);
+        await db.execute('UPDATE listings SET expires_at=UTC_TIMESTAMP(3)+INTERVAL 3 DAY WHERE id=?', [seasonal]);
+        await lifecycle.processBatch();
+        await lifecycle.processBatch();
+        const [[warning]] = await db.execute(
+            'SELECT COUNT(*) AS total FROM notifications WHERE user_id=? AND event_key LIKE ?', [seller.id, 'listing-expiry:' + seasonal + ':%']);
+        assert.equal(warning.total, 1);
+        await db.execute('UPDATE listings SET expires_at=UTC_TIMESTAMP(3) WHERE id=?', [seasonal]);
+        await request(buyer, seasonalPath, 404);
+        assert.ok(!cardIds((await request(buyer, '/search?category_id=' + category, 200)).html).includes(seasonal));
+        await lifecycle.processBatch();
+        assert.equal((await state()).status, 'archived');
+        await request(seller, lifecyclePath, 303, action('renew'));
+        assert.equal((await state()).status, 'active');
+        const mixedArchive = new URLSearchParams({ action: 'archive', request_key: crypto.randomUUID() });
+        mixedArchive.append('ids', seasonal);
+        mixedArchive.append('ids', 4294967295);
+        await request(seller, lifecyclePath, 303, mixedArchive);
+        assert.equal((await state()).status, 'archived');
+        await request(seller, lifecyclePath, 303, mixedArchive);
+        await request(seller, lifecyclePath, 303, action('restore'));
+        assert.equal((await state()).status, 'pending_review');
+        await approveSeasonal();
+        assert.equal((await state()).status, 'active');
+
+        const [[existingServices]] = await db.query("SELECT id FROM categories WHERE slug='services'");
+        if (!existingServices) {
+            [ { insertId: serviceRoot } ] = await db.query("INSERT INTO categories(slug,name) VALUES ('services','Services')");
+        }
+        const [[originalCategory]] = await db.execute('SELECT parent_id FROM categories WHERE id=?', [category]);
+        [ { insertId: serviceBranch } ] = await db.execute('INSERT INTO categories(slug,name,parent_id) VALUES (?,?,?)',
+            [key + '-services', 'Service branch', existingServices?.id || serviceRoot]);
+        await db.execute('UPDATE categories SET parent_id=? WHERE id=?', [serviceBranch, category]);
+        const service = await listing('Nested service item', 'active');
+        await db.execute('UPDATE listings SET bargaining_enabled=1 WHERE id=?', [service]);
+        await db.execute('UPDATE users SET phone_public=0 WHERE id=?', [seller.id]);
+        const servicePath = (await request(buyer, '/listings/' + service, 301)).headers.get('location');
+        const serviceHtml = (await request(buyer, servicePath, 200)).html;
+        const navs = html => (html.match(/class="[^"]*site-breadcrumbs(?=[ "])/g) || []).length;
+        assert.equal(navs(serviceHtml), 1);
+        assert.equal((serviceHtml.match(/"@type":"BreadcrumbList"/g) || []).length, 1);
+        assert.match(serviceHtml, /\/category\/services[\s\S]*Service branch[\s\S]*Account test[\s\S]*Nested service item/);
+        assert.match(serviceHtml, /Написать исполнителю/);
+        assert.doesNotMatch(serviceHtml, /Запросить покупку|data-open-price-offer|Показать телефон/);
+        await start(serviceBuyer, service, 409);
+        await request(serviceBuyer, '/offers', 409, { ...offerData, listing_id: service, listing_version: '0', request_key: crypto.randomUUID() });
+        const [[serviceWrites]] = await db.execute(`SELECT (SELECT COUNT(*) FROM deals WHERE listing_id=?) AS deals,
+            (SELECT COUNT(*) FROM price_negotiations WHERE listing_id=?) AS offers`, [service, service]);
+        assert.deepEqual([Number(serviceWrites.deals), Number(serviceWrites.offers)], [0, 0]);
+        await request(buyer, '/messages/start', 303, { listing_id: service });
+        await db.execute('UPDATE users SET phone_public=1 WHERE id=?', [seller.id]);
+        assert.match((await request(buyer, servicePath, 200)).html, /Показать телефон/);
+        const categoryHtml = (await request(buyer, '/category/' + key, 200)).html;
+        assert.equal(navs(categoryHtml), 1);
+        assert.match(categoryHtml, /\/category\/services[\s\S]*Service branch/);
+        await db.execute('UPDATE categories SET is_active=0 WHERE id=?', [serviceBranch]);
+        const categoryWithoutBranch = (await request(buyer, '/category/' + key, 200)).html;
+        assert.match(categoryWithoutBranch, /href="\/category\/services"/);
+        assert.doesNotMatch(categoryWithoutBranch, /Service branch/);
+        await start(serviceBuyer, service, 409);
+        assert.equal(navs((await request(buyer, '/', 200)).html), 0);
+        const profileHtml = (await request(buyer, '/profile?edit=1', 200)).html;
+        assert.equal(navs(profileHtml), 1);
+        assert.match(profileHtml, /href="\/profile"[\s\S]*Редактирование профиля/);
+        assert.doesNotMatch(profileHtml, /"@type":"BreadcrumbList"/);
+        await db.execute('UPDATE categories SET parent_id=? WHERE id=?', [originalCategory.parent_id, category]);
 
         const lockedCandidate = await listing('Locked pre-moderation item','draft');
         await request(seller,'/listings/' + lockedCandidate + '/publish',302,{});
@@ -1176,7 +1534,7 @@ async function run() {
         const pageTwo = (await request(admin,queuePath + '&page=2',200)).html;
         assert.equal((pageOne.match(/data-moderation-listing=/g) || []).length,20);
         assert.equal((pageTwo.match(/data-moderation-listing=/g) || []).length,1);
-        assert.match(pageOne,/aria-label="На проверке">/);
+        assert.match(pageOne,/data-admin-count="moderation"[^>]*>[1-9]\d*</);
         console.log('Pre-moderation checks passed: status transitions, stale review, concurrency, visibility, notifications and reservation.');
         console.log('SEO checks passed: metadata, breadcrumbs, redirects, XML, robots, noindex, pagination, JSON-LD and CSP header.');
         console.log('Account and review checks passed: purchases, CSRF, parallel creation, edit deadline, rating, escaped output, moderation, reports, notice and roles.');
@@ -1208,6 +1566,13 @@ async function run() {
             await db.execute('DELETE FROM listings WHERE category_id=?',[category]);
             await db.execute('DELETE FROM categories WHERE id=?',[category]);
         }
+        if (attributeOther) {
+            await db.execute('DELETE FROM listings WHERE category_id=?', [attributeOther]);
+            await db.execute('DELETE FROM categories WHERE id=?', [attributeOther]);
+        }
+        if (attributeRoot) await db.execute('DELETE FROM categories WHERE id=?', [attributeRoot]);
+        if (serviceBranch) await db.execute('DELETE FROM categories WHERE id=?', [serviceBranch]);
+        if (serviceRoot) await db.execute('DELETE FROM categories WHERE id=?', [serviceRoot]);
         for (const { id } of users) {
             await db.execute('DELETE FROM admin_logs WHERE admin_id=?',[id]);
             await db.execute('DELETE FROM users WHERE id=?',[id]);
@@ -1219,4 +1584,4 @@ async function run() {
         await db.end();
     }
 }
-verifyTestEnvironment().then(run).catch(error => { console.error(error.code || error.name, error.message); process.exitCode = 1; });
+verifyTestEnvironment().then(run).catch(error => { console.error(error.code || error.name, error.message, error.stack?.split('\n').find(line => line.includes('account.integration.js'))); process.exitCode = 1; });

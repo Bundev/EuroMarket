@@ -314,6 +314,10 @@ CREATE TABLE IF NOT EXISTS reviews (
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     updated_at DATETIME(3) NULL,
     hidden_at DATETIME(3) NULL,
+    moderation_status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+    moderation_reason VARCHAR(500) NULL,
+    moderation_version INT UNSIGNED NOT NULL DEFAULT 0,
+    INDEX idx_review_moderation (moderation_status,created_at,deal_id),
     CONSTRAINT fk_reviews_deal FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE RESTRICT,
     CONSTRAINT chk_reviews_rating CHECK (rating BETWEEN 1 AND 5)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -546,10 +550,10 @@ BEGIN
             SET last_currency = OLD.currency;
         END IF;
         IF NEW.status='active' AND NEW.moderation_locked=0
-           AND (last_price IS NULL OR last_price<>NEW.price OR last_currency<>NEW.currency) THEN
+           AND (last_price IS NULL OR last_price<>NEW.price OR CAST(last_currency AS BINARY)<>CAST(NEW.currency AS BINARY)) THEN
             INSERT INTO listing_price_history (listing_id,price,currency,is_drop)
-            VALUES (NEW.id,NEW.price,NEW.currency,COALESCE(last_currency=NEW.currency AND NEW.price<last_price,FALSE));
-            IF last_currency=NEW.currency AND NEW.price<last_price THEN
+            VALUES (NEW.id,NEW.price,NEW.currency,COALESCE(CAST(last_currency AS BINARY)=CAST(NEW.currency AS BINARY) AND NEW.price<last_price,FALSE));
+            IF CAST(last_currency AS BINARY)=CAST(NEW.currency AS BINARY) AND NEW.price<last_price THEN
                 INSERT INTO notifications (user_id,event_key,type,text,link)
                 SELECT f.user_id,CONCAT('price-drop:',NEW.id,':',NEW.review_version),'listing_status',
                        CONCAT('Цена снижена: «',NEW.title,'» · ',NEW.price,' ',NEW.currency),
@@ -603,3 +607,128 @@ CREATE TABLE IF NOT EXISTS price_negotiation_events (
     PRIMARY KEY (negotiation_id,version),
     FOREIGN KEY (negotiation_id) REFERENCES price_negotiations(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified_at DATETIME(3) NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verified_phone VARCHAR(30)
+    AS (CASE WHEN phone_verified_at IS NOT NULL THEN phone ELSE NULL END) PERSISTENT;
+ALTER TABLE users ADD UNIQUE INDEX IF NOT EXISTS uq_verified_phone (verified_phone);
+ALTER TABLE deals ADD INDEX IF NOT EXISTS idx_deals_seller_completed (seller_id,status);
+
+CREATE TABLE IF NOT EXISTS phone_verifications (
+    user_id INT UNSIGNED PRIMARY KEY,
+    phone VARCHAR(30) NOT NULL,
+    nonce CHAR(36) NOT NULL,
+    code_hash BINARY(32) NOT NULL,
+    expires_at DATETIME(3) NOT NULL,
+    attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    delivered BOOLEAN NOT NULL DEFAULT FALSE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS seller_reports (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    author_id INT UNSIGNED NOT NULL,
+    seller_id INT UNSIGNED NOT NULL,
+    reason ENUM('fraud','harassment','impersonation','other') NOT NULL,
+    comment VARCHAR(1000) NOT NULL,
+    status ENUM('open','accepted','dismissed') NOT NULL DEFAULT 'open',
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    reviewed_at DATETIME(3) NULL,
+    reviewer_id INT UNSIGNED NULL,
+    open_seller_id INT UNSIGNED AS (CASE WHEN status='open' THEN seller_id END) PERSISTENT,
+    UNIQUE KEY uq_seller_report_open (author_id,open_seller_id),
+    KEY idx_seller_reports_queue (status,id),
+    KEY idx_seller_reports_author (author_id,seller_id,created_at),
+    FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (seller_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER $$
+CREATE OR REPLACE TRIGGER trg_user_phone_verification_reset
+BEFORE UPDATE ON users FOR EACH ROW
+BEGIN
+    IF NOT (BINARY OLD.phone <=> BINARY NEW.phone) THEN
+        SET NEW.phone_verified_at = NULL;
+    END IF;
+END$$
+
+CREATE OR REPLACE TRIGGER trg_user_phone_challenge_reset
+AFTER UPDATE ON users FOR EACH ROW
+BEGIN
+    IF NOT (BINARY OLD.phone <=> BINARY NEW.phone) THEN
+        DELETE FROM phone_verifications WHERE user_id=NEW.id;
+    END IF;
+END$$
+DELIMITER ;
+
+
+CREATE TABLE IF NOT EXISTS listing_attributes (
+    listing_id INT UNSIGNED NOT NULL,
+    field_key VARCHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    text_value VARCHAR(100) NULL,
+    number_value DECIMAL(12,2) NULL,
+    PRIMARY KEY (listing_id,field_key),
+    KEY idx_attribute_text (field_key,text_value,listing_id),
+    KEY idx_attribute_number (field_key,number_value,listing_id),
+    CHECK ((text_value IS NULL) <> (number_value IS NULL)),
+    FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+ALTER TABLE saved_searches ADD COLUMN IF NOT EXISTS attribute_query TEXT NULL;
+ALTER TABLE saved_searches ADD COLUMN IF NOT EXISTS sort_order VARCHAR(16) NOT NULL DEFAULT 'newest';
+
+
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS published_at DATETIME(3) NULL;
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS expires_at DATETIME(3) NULL;
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS expired_at DATETIME(3) NULL;
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS bumped_at DATETIME(3) NULL;
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS approved_version INT UNSIGNED NULL;
+ALTER TABLE listings ADD INDEX IF NOT EXISTS idx_listing_expiry (status,expires_at,id);
+
+CREATE TABLE IF NOT EXISTS listing_lifecycle_requests (
+    user_id INT UNSIGNED NOT NULL,
+    request_key CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    fingerprint BINARY(32) NOT NULL,
+    result JSON NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT UTC_TIMESTAMP(3),
+    PRIMARY KEY (user_id,request_key),
+    KEY idx_lifecycle_request_age (created_at),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER $$
+CREATE OR REPLACE TRIGGER trg_listing_moderation_guard
+BEFORE UPDATE ON listings FOR EACH ROW
+BEGIN
+    DECLARE seller_status VARCHAR(20);
+    IF NEW.status = 'active' THEN
+        IF OLD.moderation_locked = 1 OR NEW.moderation_locked = 1 THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Publication restricted by moderation';
+        END IF;
+        SELECT status INTO seller_status FROM users WHERE id = NEW.user_id FOR UPDATE;
+        IF seller_status <> 'active' THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Seller account is not active';
+        END IF;
+        IF OLD.status <> 'active' THEN
+            IF OLD.status = 'pending_review' AND NEW.review_version = OLD.review_version
+               AND EXISTS (SELECT 1 FROM users WHERE id=@euromarket_actor_user_id AND role='admin' AND status='active') THEN
+                SET NEW.approved_version = NEW.review_version;
+                IF OLD.published_at IS NULL THEN
+                    SET NEW.published_at = UTC_TIMESTAMP(3);
+                    SET NEW.expires_at = COALESCE(NEW.expires_at, UTC_TIMESTAMP(3) + INTERVAL 30 DAY);
+                END IF;
+                SET NEW.expired_at = NULL;
+            ELSEIF NOT (OLD.status = 'archived' AND OLD.expired_at IS NOT NULL
+                AND OLD.approved_version IS NOT NULL AND OLD.approved_version = OLD.review_version
+                AND NEW.review_version = OLD.review_version AND NEW.user_id = OLD.user_id
+                AND COALESCE(@euromarket_actor_user_id = OLD.user_id, FALSE)
+                AND COALESCE(NEW.expires_at > UTC_TIMESTAMP(3), FALSE)) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Publication requires moderation approval';
+            END IF;
+        END IF;
+    END IF;
+END$$
+DELIMITER ;
